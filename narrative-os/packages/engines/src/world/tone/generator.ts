@@ -17,6 +17,14 @@ export class ToneEngine extends Engine {
   protected getModelTier(): "lightweight" | "pro" { return "pro"; }
   protected getContextEngines(): string[] { return []; }
 
+  /**
+   * ToneEngine 是世界观引擎的根节点，getContextEngines() 返回 []。
+   * 零依赖意味着不需要工具拉取模式，走单轮 streamRun 即可。
+   */
+  protected usesToolBasedContext(): boolean {
+    return false;
+  }
+
   async buildSystemPrompt(ctx: EngineContext): Promise<string> {
     const genre = await detectGenre(ctx.projectId, ctx.caller);
     return `你是长篇小说创作系统的【世界观基调架构师】。
