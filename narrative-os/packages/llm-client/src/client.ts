@@ -54,11 +54,14 @@ export class LLMClient {
 
   async *stream(
     messages: Message[],
-    options: LLMOptions & { tier?: ModelTier; timeoutMs?: number }
+    options: LLMOptions & { timeoutMs?: number }
   ): AsyncGenerator<LLMStreamChunk> {
-    // 开发阶段：强制使用轻量模型以节省成本，上线前恢复为动态 tier 切换
-    const tier = "lightweight";
-    const provider = options.provider || this.lightweightProvider;
+    // provider 优先级高于 tier：若显式传入 provider，则忽略 tier 选择
+    // 未指定 tier 时回退到 lightweight，保持向后兼容
+    const tier = options.tier || "lightweight";
+    const provider = options.provider || (
+      tier === "pro" ? this.proProvider : this.lightweightProvider
+    );
     const instance = createProvider(provider);
 
     const timeoutMs = options.timeoutMs || 1_800_000; // 默认 30 分钟超时（复杂引擎请求可能耗时 10-30 分钟）
