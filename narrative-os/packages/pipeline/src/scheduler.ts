@@ -388,9 +388,11 @@ export class EngineScheduler {
     const runnable = getRunnableEngines(confirmedEngines, pendingEngines);
     console.log(`[scheduler] Runnable engines: ${runnable.map((e) => e.name).join(", ") || "none"}`);
 
-    // 只取属于孵化阶段的引擎
-    const hatchRunnable = runnable.filter((e) => HATCH_ENGINE_NAMES.includes(e.name));
-    console.log(`[scheduler] Hatch runnable: ${hatchRunnable.map((e) => e.name).join(", ") || "none"}`);
+    // 只取属于孵化阶段的引擎，且排除已有 confirmed 产出的引擎（防止重复调度）
+    const hatchRunnable = runnable
+      .filter((e) => HATCH_ENGINE_NAMES.includes(e.name))
+      .filter((e) => !confirmedEngines.has(e.name));
+    console.log(`[scheduler] Hatch runnable (filtered): ${hatchRunnable.map((e) => e.name).join(", ") || "none"}`);
 
     if (hatchRunnable.length === 0) {
       console.log(`[scheduler] No runnable hatch engines for ${projectId}`);
