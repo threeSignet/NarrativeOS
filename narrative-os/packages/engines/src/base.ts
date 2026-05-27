@@ -128,6 +128,48 @@ function trimToolLoopMessages(messages: Message[], budgetTokens: number): Messag
   return result;
 }
 
+/**
+ * JSON 字符串感知的括号匹配 — 正确跳过字符串内部的 { 和 }
+ * 返回从 startIdx 开始的外层 JSON 对象的结束索引（exclusive），找不到返回 -1
+ */
+function findJsonObjectEnd(raw: string, startIdx: number): number {
+  let depth = 0;
+  let inString = false;
+  let escapeNext = false;
+
+  for (let i = startIdx; i < raw.length; i++) {
+    const ch = raw[i];
+
+    if (escapeNext) {
+      escapeNext = false;
+      continue;
+    }
+
+    if (ch === "\\") {
+      escapeNext = true;
+      continue;
+    }
+
+    if (ch === '"') {
+      inString = !inString;
+      continue;
+    }
+
+    if (inString) continue;
+
+    if (ch === "{" || ch === "[") {
+      depth++;
+    } else if (ch === "}" || ch === "]") {
+      depth--;
+      if (depth === 0) {
+        return i + 1;
+      }
+    }
+  }
+
+  return -1;
+}
+
 export interface PipelineSnapshot {
   systemPrompt: string;
   userPrompt: string;
@@ -275,15 +317,7 @@ export abstract class Engine {
       const proposalsMatch = cleaned.match(/\{\s*"proposals"\s*:\s*\[/);
       if (proposalsMatch) {
         const startIdx = proposalsMatch.index!;
-        let depth = 0;
-        let endIdx = -1;
-        for (let i = startIdx; i < cleaned.length; i++) {
-          if (cleaned[i] === '{') depth++;
-          else if (cleaned[i] === '}') {
-            depth--;
-            if (depth === 0) { endIdx = i + 1; break; }
-          }
-        }
+        const endIdx = findJsonObjectEnd(cleaned, startIdx);
         if (endIdx !== -1) {
           const json = cleaned.substring(startIdx, endIdx);
           const proposals = JSON.parse(json).proposals || [];
@@ -303,15 +337,7 @@ export abstract class Engine {
       while ((match = typeRegex.exec(cleaned)) !== null) {
         if (individualProposals.length >= maxProposals) break;
         const startIdx = match.index;
-        let depth = 0;
-        let endIdx = -1;
-        for (let i = startIdx; i < cleaned.length; i++) {
-          if (cleaned[i] === '{') depth++;
-          else if (cleaned[i] === '}') {
-            depth--;
-            if (depth === 0) { endIdx = i + 1; break; }
-          }
-        }
+        const endIdx = findJsonObjectEnd(cleaned, startIdx);
         if (endIdx !== -1) {
           try {
             const json = cleaned.substring(startIdx, endIdx);
@@ -328,15 +354,7 @@ export abstract class Engine {
       // 策略3：回退 — 使用括号计数提取第一个完整 JSON 对象
       const firstBrace = cleaned.indexOf('{');
       if (firstBrace === -1) throw new Error('No JSON found');
-      let depth = 0;
-      let endIdx = -1;
-      for (let i = firstBrace; i < cleaned.length; i++) {
-        if (cleaned[i] === '{') depth++;
-        else if (cleaned[i] === '}') {
-          depth--;
-          if (depth === 0) { endIdx = i + 1; break; }
-        }
-      }
+      const endIdx = findJsonObjectEnd(cleaned, firstBrace);
       if (endIdx === -1) throw new Error('Unterminated JSON');
       const firstJson = cleaned.substring(firstBrace, endIdx);
       const proposals = JSON.parse(firstJson).proposals || [];
@@ -368,15 +386,7 @@ export abstract class Engine {
       const proposalsMatch = cleaned.match(/\{\s*"proposals"\s*:\s*\[/);
       if (proposalsMatch) {
         const startIdx = proposalsMatch.index!;
-        let depth = 0;
-        let endIdx = -1;
-        for (let i = startIdx; i < cleaned.length; i++) {
-          if (cleaned[i] === '{') depth++;
-          else if (cleaned[i] === '}') {
-            depth--;
-            if (depth === 0) { endIdx = i + 1; break; }
-          }
-        }
+        const endIdx = findJsonObjectEnd(cleaned, startIdx);
         if (endIdx !== -1) {
           const parsed = JSON.parse(cleaned.substring(startIdx, endIdx));
           const proposals = parsed.proposals || [];
@@ -390,15 +400,7 @@ export abstract class Engine {
       let count = 0;
       while ((match = typeRegex.exec(cleaned)) !== null) {
         const startIdx = match.index;
-        let depth = 0;
-        let endIdx = -1;
-        for (let i = startIdx; i < cleaned.length; i++) {
-          if (cleaned[i] === '{') depth++;
-          else if (cleaned[i] === '}') {
-            depth--;
-            if (depth === 0) { endIdx = i + 1; break; }
-          }
-        }
+        const endIdx = findJsonObjectEnd(cleaned, startIdx);
         if (endIdx !== -1) {
           try {
             const proposal = JSON.parse(cleaned.substring(startIdx, endIdx));
