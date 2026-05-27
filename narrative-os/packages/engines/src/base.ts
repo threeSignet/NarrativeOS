@@ -559,6 +559,37 @@ export abstract class Engine {
       }
 
       const proposals = this.parseOutput(raw);
+
+      // 如果解析失败（返回 error 提案或空数组），发送明确的 error 事件
+      if (proposals.length === 0 || proposals.every((p) => p.type === "error")) {
+        const errorMsg = proposals.length > 0
+          ? `引擎 ${this.name} 解析失败：${proposals[0]?.content?.reasoning || "无法解析 LLM 输出"}`
+          : `引擎 ${this.name} 未生成任何提案`;
+        yield {
+          type: "error",
+          message: errorMsg,
+          fallbackTier: currentTier,
+        };
+        const finalPromptTokens = capturedUsage?.promptTokens || estimateTokens(fullSystemPrompt + userMessage);
+        const finalCompletionTokens = capturedUsage?.completionTokens || estimateTokens(raw);
+        const result: EngineResult = {
+          proposals: [],
+          latencyMs: Date.now() - startTime,
+          pipeline: {
+            systemPrompt: fullSystemPrompt,
+            userPrompt: userMessage,
+            rawOutput: raw,
+            model: capturedModel,
+            promptTokens: finalPromptTokens,
+            completionTokens: finalCompletionTokens,
+            totalTokens: capturedUsage?.totalTokens || (finalPromptTokens + finalCompletionTokens),
+            latencyMs: Date.now() - startTime,
+          },
+        };
+        yield { type: "done", result };
+        return result;
+      }
+
       // 细化模式：强制注入 scale 和 needs_refinement
       this.injectRefinementMeta(proposals, ctx);
       // 提前中断时 capturedUsage 可能不完整，使用本地估算作为兜底
@@ -800,6 +831,37 @@ export abstract class Engine {
       }
 
       const proposals = this.parseOutput(rawOutput);
+
+      // 如果解析失败，发送明确的 error 事件
+      if (proposals.length === 0 || proposals.every((p) => p.type === "error")) {
+        const errorMsg = proposals.length > 0
+          ? `引擎 ${this.name} 解析失败：${proposals[0]?.content?.reasoning || "无法解析 LLM 输出"}`
+          : `引擎 ${this.name} 未生成任何提案`;
+        yield {
+          type: "error",
+          message: errorMsg,
+          fallbackTier: tier,
+        };
+        const finalPromptTokens = capturedUsage?.promptTokens || estimateTokens(fullSystemPrompt + userMessage);
+        const finalCompletionTokens = capturedUsage?.completionTokens || estimateTokens(rawOutput);
+        const result: EngineResult = {
+          proposals: [],
+          latencyMs: Date.now() - startTime,
+          pipeline: {
+            systemPrompt: fullSystemPrompt,
+            userPrompt: userMessage,
+            rawOutput: rawOutput,
+            model: capturedModel,
+            promptTokens: finalPromptTokens,
+            completionTokens: finalCompletionTokens,
+            totalTokens: capturedUsage?.totalTokens || (finalPromptTokens + finalCompletionTokens),
+            latencyMs: Date.now() - startTime,
+          },
+        };
+        yield { type: "done", result };
+        return result;
+      }
+
       this.injectRefinementMeta(proposals, ctx);
       const finalPromptTokens = capturedUsage?.promptTokens || estimateTokens(fullSystemPrompt + userMessage);
       const finalCompletionTokens = capturedUsage?.completionTokens || estimateTokens(rawOutput);
