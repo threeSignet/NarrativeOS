@@ -3,7 +3,7 @@ import {
   Loader2, Sparkles, BookOpen, Wand2, Check, CheckCircle,
   Globe2, Mountain, Swords, MapPin, Users, Package,
   FileText, Layers, PawPrint, Music, Clock, Flame, Coins, GitBranch, Scale, Eye, Pen, Ruler,
-  Info, ChevronDown, ChevronRight,
+  Info, ChevronDown, ChevronRight, Lock,
 } from 'lucide-react'
 import type { Proposal, EngineInfo } from '../../stores/hatch'
 import type { Project } from '../../stores/projects'
@@ -334,7 +334,7 @@ function EngineMapPanel({ engines, hatchGroup }: { engines: EngineInfo[]; hatchG
 
 // ── Main Component ──
 
-export default function HatchingView({ project, phase, proposals, engines, currentEngine, streamText, lastStreamText, hatchError, onStart, hatchGroup, onStartStudio, onCompletePhase, phaseConfirmationTarget }: {
+export default function HatchingView({ project, phase, proposals, engines, currentEngine, streamText, lastStreamText, hatchError, onStart, hatchGroup, onStartStudio, onCompletePhase, phaseConfirmationTarget, onActivateProject, locked }: {
   project: Project
   phase: string
   proposals: Proposal[]
@@ -348,6 +348,8 @@ export default function HatchingView({ project, phase, proposals, engines, curre
   onStartStudio: () => void
   onCompletePhase?: (phase: string) => void
   phaseConfirmationTarget?: string | null
+  onActivateProject?: () => void
+  locked?: boolean
 }) {
   const pipeline = useMemo(
     () => computePipeline(engines, proposals, currentEngine, hatchGroup),
@@ -592,6 +594,28 @@ export default function HatchingView({ project, phase, proposals, engines, curre
           </details>
         )}
 
+        {/* Error display */}
+        {hatchError && !pending.length && (
+          <div style={{
+            padding: '14px 18px', borderRadius: 10,
+            background: 'rgba(252,165,165,0.06)', border: '1px solid rgba(252,165,165,0.15)',
+            maxWidth: 480,
+          }}>
+            <div style={{ fontSize: 13, color: 'var(--accent-rose)', lineHeight: 1.6, marginBottom: 8 }}>
+              {hatchError}
+            </div>
+            <button onClick={onStart} style={{
+              display: 'inline-flex', alignItems: 'center', gap: 6,
+              padding: '8px 16px', borderRadius: 8,
+              background: 'rgba(252,165,165,0.12)', color: 'var(--accent-rose)',
+              border: '1px solid rgba(252,165,165,0.25)',
+              fontSize: 13, fontWeight: 500, cursor: 'pointer', fontFamily: 'var(--font-ui)',
+            }}>
+              <Wand2 size={14} /> 重试
+            </button>
+          </div>
+        )}
+
         {/* Action prompt */}
         <div style={{
           display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 10,
@@ -657,7 +681,7 @@ export default function HatchingView({ project, phase, proposals, engines, curre
                 fontFamily: 'var(--font-brand)', fontSize: 17, color: 'var(--text-primary)',
                 letterSpacing: '0.01em',
               }}>
-                「{project.title}」孵化中
+                「{project.title}」{locked ? '已锁定' : '孵化中'}
               </h2>
               <PhaseBadge phase={phase} pipeline={pipeline} allEngines={engines} />
             </div>
@@ -666,6 +690,29 @@ export default function HatchingView({ project, phase, proposals, engines, curre
             </p>
           </div>
         </div>
+        {!locked && onActivateProject && (
+          <button
+            onClick={onActivateProject}
+            style={{
+              display: 'flex', alignItems: 'center', gap: 6,
+              padding: '6px 14px', borderRadius: 8,
+              background: 'rgba(34,197,94,0.08)', border: '1px solid rgba(34,197,94,0.25)',
+              color: '#4ade80', fontSize: 12, fontWeight: 500, cursor: 'pointer',
+              transition: 'all 0.2s ease',
+            }}
+            onMouseEnter={(e) => {
+              e.currentTarget.style.background = 'rgba(34,197,94,0.15)'
+              e.currentTarget.style.borderColor = 'rgba(34,197,94,0.4)'
+            }}
+            onMouseLeave={(e) => {
+              e.currentTarget.style.background = 'rgba(34,197,94,0.08)'
+              e.currentTarget.style.borderColor = 'rgba(34,197,94,0.25)'
+            }}
+          >
+            <Lock size={13} />
+            设定集锁定
+          </button>
+        )}
       </div>
 
       {/* Pipeline progress */}

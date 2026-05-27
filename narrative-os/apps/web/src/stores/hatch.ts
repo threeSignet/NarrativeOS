@@ -185,6 +185,7 @@ interface HatchStore {
   approveProposal: (proposalId: string, projectId: string) => Promise<void>
   rejectProposal: (proposalId: string) => Promise<void>
   reviseProposal: (proposalId: string, notes: string) => Promise<void>
+  activateProject: (projectId: string) => Promise<void>
   dismissAutoPopup: () => void
   setProposalListOpen: (open: boolean) => void
   setCurrentEngine: (engine: string | null) => void
@@ -257,14 +258,14 @@ export const useHatchStore = create<HatchStore>((set, get) => ({
       case 'engine_started': {
         const engineName = payload.node as string
         if (engineName && engineName !== 'refinement') {
-          set({ currentEngine: engineName })
+          set({ currentEngine: engineName, phase: 'streaming', streamText: '' })
         }
         break
       }
       case 'engine_chunk': {
         const text = payload.text as string
         if (text) {
-          set({ streamText: get().streamText + text })
+          set((state) => ({ streamText: state.streamText + text }))
         }
         break
       }
@@ -320,6 +321,36 @@ export const useHatchStore = create<HatchStore>((set, get) => ({
         )?.[0]
         const jobId = existingJobId || `engine:${engine}:ws`
         get().updateLLMJob(jobId, { active: false })
+        // 皇帝模式：后端自动运行完成后，前端同步数据并检查 pending 提案
+        const projectId = get().proposals[0]?.projectId
+        if (projectId) {
+          get().fetchProposals(projectId).then(() => {
+            const pending = get().proposals.filter((p) => p.status === 'pending')
+            if (pending.length > 0) {
+              set({ phase: 'waiting', autoPopupProposalId: pending[0].id, currentEngine: null, streamText: '' })
+            } else {
+              set({ phase: 'waiting', currentEngine: null, streamText: '' })
+            }
+          })
+          get().fetchEngines(projectId)
+        } else {
+          set({ phase: 'waiting', currentEngine: null, streamText: '' })
+        }
+        break
+      }
+      case 'new_proposals':
+      case 'proposals_staged': {
+        // 皇帝模式：后端推送新提案到达，前端同步数据并弹出 MOU
+        const projectId = get().proposals[0]?.projectId
+        if (projectId) {
+          get().fetchProposals(projectId).then(() => {
+            const pending = get().proposals.filter((p) => p.status === 'pending')
+            if (pending.length > 0) {
+              set({ phase: 'waiting', autoPopupProposalId: pending[0].id, currentEngine: null })
+            }
+          })
+          get().fetchEngines(projectId)
+        }
         break
       }
       case 'phase_changed': {
@@ -461,6 +492,11 @@ export const useHatchStore = create<HatchStore>((set, get) => ({
               }))
             if (embedded.length > 0) set({ proposals: [...get().proposals, ...embedded] })
           }
+          // 检查 proposalCount，如果为 0 且没有 error 字段，记录错误
+          const proposalCount = (parsed.proposalCount as number) ?? 0
+          if (proposalCount === 0 && !parsed.error) {
+            set({ error: `引擎运行完成，但未生成任何提案。可能原因：LLM 输出格式不正确或解析失败。` })
+          }
         },
       })
 
@@ -546,11 +582,14 @@ export const useHatchStore = create<HatchStore>((set, get) => ({
       // MOU 自动弹窗：仅对新到达的 pending 提案触发
       const isStreaming = phaseBeforeFetch === 'streaming' || get().phase === 'streaming'
       const newPending = pending.find((p) => !prevPendingIds.has(p.id))
+      // 如果当前已有一个指向有效 pending 提案的 autoPopupId，保留它（防止多次 fetchProposals 竞态清除）
+      const existingPopupId = get().autoPopupProposalId
+      const hasValidExistingPopup = existingPopupId && pending.some(p => p.id === existingPopupId)
       const autoPopupId = isStreaming ? null
         : newPending
           ? newPending.id
-          : (pending.length > 0 && get().autoPopupProposalId && pending.some(p => p.id === get().autoPopupProposalId)
-            ? get().autoPopupProposalId
+          : (hasValidExistingPopup
+            ? existingPopupId
             : null)
 
       // 阶段判定：简化 — 有 pending 弹窗，无 pending 则 idle/waiting
@@ -875,6 +914,15 @@ export const useHatchStore = create<HatchStore>((set, get) => ({
       get().runEngine(projectId, sourceNode)
     } else {
       set({ phase: 'waiting' })
+    }
+  },
+
+  activateProject: async (projectId) => {
+    try {
+      await apiPost(`/projects/${projectId}/activate`, {})
+      set({ locked: true })
+    } catch (err: any) {
+      set({ error: `设定集锁定失败：${err.message}` })
     }
   },
 
