@@ -173,6 +173,8 @@ interface HatchStore {
   _relations: SettingItemRelation[]
   // 当前等待用户确认的阶段名称（如 'geography'）
   phaseConfirmationTarget: string | null
+  // 细化引擎上下文（用于友好显示细化信息）
+  _refinementContext: { parentName: string; parentScale: string; targetScale: string } | null
 
   fetchProposals: (projectId: string) => Promise<void>
   fetchSettings: (projectId: string) => Promise<void>
@@ -222,6 +224,7 @@ export const useHatchStore = create<HatchStore>((set, get) => ({
   proposalListOpen: false,
   _lastTokenUpdate: 0,
   _relations: [],
+  _refinementContext: null,
 
   registerLLMJob: (jobId, jobLabel, status) => {
     const jobs = { ...get().activeLLMJobs }
@@ -257,8 +260,13 @@ export const useHatchStore = create<HatchStore>((set, get) => ({
     switch (type) {
       case 'engine_started': {
         const engineName = payload.node as string
-        if (engineName && engineName !== 'refinement') {
-          set({ currentEngine: engineName, phase: 'streaming', streamText: '' })
+        if (engineName) {
+          set({
+            currentEngine: engineName,
+            phase: 'streaming',
+            streamText: '',
+            _refinementContext: (payload.refinement as { parentName: string; parentScale: string; targetScale: string }) || null,
+          })
         }
         break
       }
@@ -321,20 +329,21 @@ export const useHatchStore = create<HatchStore>((set, get) => ({
         )?.[0]
         const jobId = existingJobId || `engine:${engine}:ws`
         get().updateLLMJob(jobId, { active: false })
-        // 皇帝模式：后端自动运行完成后，前端同步数据并检查 pending 提案
+        // 引擎完成后同步数据，根据 pending 情况决定下一步
         const projectId = get().proposals[0]?.projectId
         if (projectId) {
           get().fetchProposals(projectId).then(() => {
             const pending = get().proposals.filter((p) => p.status === 'pending')
             if (pending.length > 0) {
-              set({ phase: 'waiting', autoPopupProposalId: pending[0].id, currentEngine: null, streamText: '' })
+              set({ phase: 'waiting', autoPopupProposalId: pending[0].id, currentEngine: null, streamText: '', _refinementContext: null })
             } else {
-              set({ phase: 'waiting', currentEngine: null, streamText: '' })
+              // 无 pending → 后端可能在运行下一引擎，不清 phase，等待新事件
+              set({ currentEngine: null, streamText: '', _refinementContext: null })
             }
           })
           get().fetchEngines(projectId)
         } else {
-          set({ phase: 'waiting', currentEngine: null, streamText: '' })
+          set({ currentEngine: null, streamText: '', _refinementContext: null })
         }
         break
       }
@@ -593,44 +602,32 @@ export const useHatchStore = create<HatchStore>((set, get) => ({
             ? existingPopupId
             : null)
 
-      // 阶段判定：简化 — 有 pending 弹窗，无 pending 则 idle/waiting
-      // 后端负责编排，前端不判定下一步
-      const engines = get().engines
-      let phase: HatchPhase
-      if (pending.length > 0) {
-        phase = 'waiting'
-      } else if (phaseBeforeFetch === 'streaming') {
-        phase = 'streaming'
-      } else if (get().locked) {
-        phase = 'complete'
-      } else if (proposals.length > 0) {
-        // 有历史提案但无 pending → 后端正在自动推进中
-        phase = get().phase === 'streaming' ? 'streaming' : 'waiting'
-      } else {
-        phase = 'idle'
+      // 状态分离：fetch 只更新 proposals，不碰 phase
+      // phase 由 WS/SSE 事件驱动，避免 fetch 覆盖运行时状态
+      const updates: Partial<HatchStore> = {
+        proposals,
+        autoPopupProposalId: autoPopupId,
+        error: null,
       }
 
-      // 保留 waiting_phase_confirmation 状态（除非有新的 pending 提案需要审批）
-      if (get().phase === 'waiting_phase_confirmation' && pending.length === 0) {
-        phase = 'waiting_phase_confirmation'
-      }
-
-      // 保留 waiting_user_action 状态
-      if (get().phase === 'waiting_user_action' && pending.length === 0) {
-        phase = 'waiting_user_action'
+      // 页面恢复场景：当前为 idle 且有 pending 时，需要切到 waiting
+      if (pending.length > 0 && get().phase === 'idle') {
+        updates.phase = 'waiting'
+        updates.autoPopupProposalId = pending[0].id
       }
 
       // 页面刷新后自动恢复 hatchGroup
       let hatchGroup = get().hatchGroup
       if (hatchGroup === 'world') {
         const hasStudioActivity = proposals.some((p) => {
-          const eng = engines.find((e) => e.name === p.sourceNode)
+          const eng = get().engines.find((e) => e.name === p.sourceNode)
           return eng?.group === 'studio'
         })
         if (hasStudioActivity) hatchGroup = 'studio'
       }
+      updates.hatchGroup = hatchGroup
 
-      set({ proposals, phase, hatchGroup, autoPopupProposalId: autoPopupId, error: null })
+      set(updates)
     } catch (err) {
       console.error('[hatch] fetchProposals failed:', err)
       if (!get().error) set({ error: '加载提案失败' })
@@ -651,18 +648,10 @@ export const useHatchStore = create<HatchStore>((set, get) => ({
   },
 
   fetchEngines: async (projectId) => {
-    const phaseBeforeFetch = get().phase
     try {
       const engines = await apiFetch<EngineInfo[]>(`/hatch/${projectId}/engines`)
+      // 状态分离：只更新 engines，不碰 phase
       set({ engines })
-      const proposals = get().proposals
-      if (proposals.length > 0) {
-        // 后端驱动编排，前端只根据 pending 状态判定展示阶段
-        const pending = proposals.filter((p) => p.status === 'pending')
-        if (phaseBeforeFetch !== 'streaming') {
-          set({ phase: pending.length > 0 ? 'waiting' : get().phase })
-        }
-      }
     } catch (err) {
       console.error('[hatch] fetchEngines failed:', err)
     }
@@ -850,6 +839,10 @@ export const useHatchStore = create<HatchStore>((set, get) => ({
       get().fetchEngines(projectId),
       get().fetchSettings(projectId),
     ])
+
+    // 审批可能更新了项目标题（如 tone 提案），刷新 project 数据
+    const { useProjectStore } = await import('./projects')
+    await useProjectStore.getState().getProject(projectId)
   },
 
   rejectProposal: async (proposalId) => {
@@ -941,6 +934,6 @@ export const useHatchStore = create<HatchStore>((set, get) => ({
 
   reset: () => {
     get()._abortController?.abort()
-    set({ phase: 'idle', hatchGroup: 'world', phaseConfirmationTarget: null, proposals: [], settingItems: [], engines: [], streamText: '', lastStreamText: '', error: null, llmStatus: null, activeLLMJobs: {}, locked: false, currentEngine: null, _abortController: null, autoPopupProposalId: null, proposalListOpen: false, _lastTokenUpdate: 0, _relations: [] })
+    set({ phase: 'idle', hatchGroup: 'world', phaseConfirmationTarget: null, proposals: [], settingItems: [], engines: [], streamText: '', lastStreamText: '', error: null, llmStatus: null, activeLLMJobs: {}, locked: false, currentEngine: null, _abortController: null, autoPopupProposalId: null, proposalListOpen: false, _lastTokenUpdate: 0, _relations: [], _refinementContext: null })
   },
 }))

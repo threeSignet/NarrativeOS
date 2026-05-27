@@ -736,12 +736,20 @@ app.post("/proposals/:id/approve", async (c) => {
 
     // 审批成功后，后端自动推进下一阶段（细化/下一引擎/完成）
     // 前端无需调用 advanceHatching，所有编排逻辑在后端
-    if (result.executed && scheduler) {
+    if (result.executed) {
       const [proposal] = await db
-        .select({ projectId: aiProposals.projectId })
+        .select({ projectId: aiProposals.projectId, type: aiProposals.type, sourceNode: aiProposals.sourceNode, title: aiProposals.title })
         .from(aiProposals)
         .where(eq(aiProposals.id, proposalId));
-      if (proposal?.projectId) {
+
+      // 审批世界观基调提案时，同步更新项目标题
+      if (proposal?.projectId && (proposal.type === 'tone' || proposal.sourceNode === 'tone') && proposal.title) {
+        await db.update(projects)
+          .set({ title: proposal.title, updatedAt: new Date() })
+          .where(eq(projects.id, proposal.projectId));
+      }
+
+      if (proposal?.projectId && scheduler) {
         scheduler.onProposalsResolved(proposal.projectId).catch((err: Error) => {
           console.error(`[approve] auto-advance failed for ${proposal.projectId}:`, err.message);
         });

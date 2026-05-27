@@ -95,7 +95,9 @@
       "Bash(git *)",
       "Bash(findstr /I \"error\")",
       "Bash(echo \"Exit code: $?\")",
-      "Bash(echo \"---exit code: $?---\")"
+      "Bash(echo \"---exit code: $?---\")",
+      "Skill(superpowers:brainstorming)",
+      "Skill(superpowers:executing-plans)"
     ]
   },
   "enabledPlugins": {

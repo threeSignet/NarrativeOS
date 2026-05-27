@@ -39,3 +39,31 @@ engineLabelMap['story_blueprint'] = '故事蓝图'
 engineLabelMap['outline-generator'] = '大纲'
 engineLabelMap['volume-outline'] = '卷纲'
 engineLabelMap['chapter-outline'] = '章纲'
+
+/**
+ * 获取引擎的友好显示标签
+ * @param engineName 引擎名（如 'geography' 或 'geography:refine'）
+ * @param refinementCtx 细化上下文（可选）
+ * @returns 用户友好的显示标签
+ */
+export function getEngineDisplayLabel(
+  engineName: string | null,
+  refinementCtx?: { parentName: string; targetScale: string } | null
+): string {
+  if (!engineName) return '...'
+
+  // 主引擎
+  if (!engineName.includes(':refine')) {
+    return engineLabelMap[engineName] || engineName
+  }
+
+  // 细化引擎
+  const baseEngine = engineName.split(':')[0]
+  const baseLabel = engineLabelMap[baseEngine] || baseEngine
+
+  if (refinementCtx) {
+    return `${baseLabel}细化：「${refinementCtx.parentName}」→ ${refinementCtx.targetScale}`
+  }
+
+  return `${baseLabel}细化`
+}

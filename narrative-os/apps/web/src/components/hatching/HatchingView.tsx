@@ -7,7 +7,7 @@ import {
 } from 'lucide-react'
 import type { Proposal, EngineInfo } from '../../stores/hatch'
 import type { Project } from '../../stores/projects'
-import { engineLabelMap } from '../../utils/engineConfig'
+import { engineLabelMap, getEngineDisplayLabel } from '../../utils/engineConfig'
 import { useAutoScroll } from '../../hooks/useAutoScroll'
 
 // ── Pipeline state derived from backend engines array (already in topological order) ──
@@ -334,7 +334,7 @@ function EngineMapPanel({ engines, hatchGroup }: { engines: EngineInfo[]; hatchG
 
 // ── Main Component ──
 
-export default function HatchingView({ project, phase, proposals, engines, currentEngine, streamText, lastStreamText, hatchError, onStart, hatchGroup, onStartStudio, onCompletePhase, phaseConfirmationTarget, onActivateProject, locked }: {
+export default function HatchingView({ project, phase, proposals, engines, currentEngine, streamText, lastStreamText, hatchError, onStart, hatchGroup, onStartStudio, onCompletePhase, phaseConfirmationTarget, onActivateProject, locked, refinementContext }: {
   project: Project
   phase: string
   proposals: Proposal[]
@@ -350,6 +350,7 @@ export default function HatchingView({ project, phase, proposals, engines, curre
   phaseConfirmationTarget?: string | null
   onActivateProject?: () => void
   locked?: boolean
+  refinementContext?: { parentName: string; parentScale: string; targetScale: string } | null
 }) {
   const pipeline = useMemo(
     () => computePipeline(engines, proposals, currentEngine, hatchGroup),
@@ -361,7 +362,7 @@ export default function HatchingView({ project, phase, proposals, engines, curre
   )
   const streamScroll = useAutoScroll(streamText)
 
-  const currentEngineLabel = currentEngine ? (engineLabelMap[currentEngine] || currentEngine) : null
+  const currentEngineLabel = getEngineDisplayLabel(currentEngine, refinementContext)
   const displayText = streamText || lastStreamText
 
   // ── Determine content by phase ──
@@ -449,7 +450,10 @@ export default function HatchingView({ project, phase, proposals, engines, curre
             fontFamily: 'var(--font-mono)', fontSize: 13, lineHeight: 1.8,
             color: 'var(--text-secondary)', whiteSpace: 'pre-wrap', overflowY: 'auto',
           }}>
-            {streamText || 'AI 正在思考，请稍候...'}
+            {streamText || (currentEngine?.includes(':refine')
+              ? `AI 正在细化「${refinementContext?.parentName || ''}」...`
+              : 'AI 正在思考，请稍候...'
+            )}
             <span style={{ animation: 'pulse 1s ease-in-out infinite', color: 'var(--accent-violet)' }}>|</span>
           </div>
         </div>

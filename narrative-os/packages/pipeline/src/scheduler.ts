@@ -876,7 +876,18 @@ export class EngineScheduler {
 
     try {
       this.setRunning(projectId, lockKey, true);
-      this.emit({ type: "engine_started", projectId, node: `${engineName}:refine` });
+      this.emit({
+        type: "engine_started",
+        projectId,
+        node: `${engineName}:refine`,
+        payload: {
+          refinement: {
+            parentName: refinement.parentName,
+            parentScale: refinement.parentScale,
+            targetScale: refinement.targetScale,
+          },
+        },
+      });
 
       const [project] = await db
         .select({ genre: projects.genre })
@@ -912,7 +923,19 @@ export class EngineScheduler {
         console.log(`[scheduler] Refinement staged ${proposalIds.length} proposals`);
       }
 
-      this.emit({ type: "engine_done", projectId, node: `${engineName}:refine` });
+      this.emit({
+        type: "engine_done",
+        projectId,
+        node: `${engineName}:refine`,
+        payload: {
+          engine: `${engineName}:refine`,
+          refinement: {
+            parentName: refinement.parentName,
+            parentScale: refinement.parentScale,
+            targetScale: refinement.targetScale,
+          },
+        },
+      });
       return proposalIds;
     } catch (err: any) {
       console.error(`[scheduler] Refinement failed:`, err.message);

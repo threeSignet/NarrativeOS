@@ -4,7 +4,7 @@ import {
 } from 'lucide-react'
 import { useHatchStore } from '../../stores/hatch'
 import { useCompanionStore } from '../../stores/companion'
-import { engineLabelMap } from '../../utils/engineConfig'
+import { getEngineDisplayLabel } from '../../utils/engineConfig'
 import TaskBar from '../ui/TaskBar'
 import LLMStatusPopup from '../editor/LLMStatusPopup'
 
@@ -15,6 +15,7 @@ export default function BottomBar({ onOpenProposalList }: {
   const proposals = useHatchStore((s) => s.proposals)
   const settingItems = useHatchStore((s) => s.settingItems)
   const currentEngine = useHatchStore((s) => s.currentEngine)
+  const refinementContext = useHatchStore((s) => s._refinementContext)
   const companionStreaming = useCompanionStore((s) => s.isStreaming)
 
   const flowState = useMemo<'IDLE' | 'AI_PROCESSING' | 'REVIEWING' | 'EXECUTING' | 'WORLD_DONE'>(() => {
@@ -90,8 +91,8 @@ export default function BottomBar({ onOpenProposalList }: {
             animation: phase === 'streaming' ? 'pulse 1.5s ease-in-out infinite' : undefined,
           }} />
           <span style={{ fontWeight: 500, color: 'var(--text-secondary)' }}>
-            {phase === 'streaming' ? (currentEngine ? `生成:${engineLabelMap[currentEngine] || currentEngine}` : 'GEN')
-              : phase === 'waiting' ? (currentEngine ? `等待:${engineLabelMap[currentEngine] || currentEngine}` : 'WAIT')
+            {phase === 'streaming' ? (currentEngine ? `生成:${getEngineDisplayLabel(currentEngine, refinementContext)}` : 'GEN')
+              : phase === 'waiting' ? (currentEngine ? `等待:${getEngineDisplayLabel(currentEngine, refinementContext)}` : 'WAIT')
               : phase === 'waiting_phase_confirmation' ? 'PHASE_CONFIRM'
               : phase === 'world_complete' ? 'WORLD_DONE'
               : 'IDLE'}

@@ -146,6 +146,7 @@ export default function ProjectEditor() {
   const setProposalListOpen = useHatchStore((s) => s.setProposalListOpen)
   const relations = useHatchStore((s) => s._relations)
   const phaseConfirmationTarget = useHatchStore((s) => s.phaseConfirmationTarget)
+  const refinementContext = useHatchStore((s) => s._refinementContext)
 
   const companionActivityText = useCompanionStore((s) => s.activityText)
   const companionActivityColor = useCompanionStore((s) => s.activityColor)
@@ -314,6 +315,7 @@ export default function ProjectEditor() {
         activateProject(project.id)
       }}
       locked={locked}
+      refinementContext={refinementContext}
     />
   ) : editorView === 'outline' ? (
     <OutlineOverviewView
