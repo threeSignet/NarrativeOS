@@ -1,5 +1,5 @@
 import { db, settingItems, settingItemRelations, projects, projectScales } from "@narrative-os/database";
-import { eq, and, asc } from "drizzle-orm";
+import { eq, and, asc, sql } from "drizzle-orm";
 import type { Message } from "@narrative-os/llm-client";
 
 export interface WorldContextOpts {
@@ -403,18 +403,27 @@ export interface ProjectScale {
   parentKey: string | null;
   sortOrder: number;
   description: string | null;
+  worldItemId?: string | null;
 }
 
 /**
  * 加载项目的自定义尺度树。
  * 如果项目没有自定义尺度（尚未运行 scale-designer），回退到默认 SCALE_CHAIN。
  */
-export async function loadProjectScales(projectId: string): Promise<ProjectScale[]> {
+export async function loadProjectScales(
+  projectId: string,
+  worldItemId?: string | null
+): Promise<ProjectScale[]> {
   try {
     const rows = await db
       .select()
       .from(projectScales)
-      .where(eq(projectScales.projectId, projectId))
+      .where(
+        and(
+          eq(projectScales.projectId, projectId),
+          worldItemId ? eq(projectScales.worldItemId, worldItemId) : sql`${projectScales.worldItemId} IS NULL`
+        )
+      )
       .orderBy(asc(projectScales.sortOrder));
 
     if (rows.length > 0) {
@@ -424,6 +433,7 @@ export async function loadProjectScales(projectId: string): Promise<ProjectScale
         parentKey: r.parentKey ?? null,
         sortOrder: r.sortOrder,
         description: r.description ?? null,
+        worldItemId: r.worldItemId ?? null,
       }));
     }
 
@@ -444,9 +454,10 @@ export async function loadProjectScales(projectId: string): Promise<ProjectScale
 /** 获取某尺度在项目尺度链中的下一级 */
 export async function getProjectChildScale(
   projectId: string,
-  currentScale: string
+  currentScale: string,
+  worldItemId?: string | null
 ): Promise<ProjectScale | null> {
-  const scales = await loadProjectScales(projectId);
+  const scales = await loadProjectScales(projectId, worldItemId);
   const current = scales.find((s) => s.key === currentScale);
   if (!current) return null;
   return scales.find((s) => s.parentKey === current.key) ?? null;

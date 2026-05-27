@@ -16,7 +16,8 @@
       "@narrative-os/llm-client": ["./packages/llm-client/src/index.ts"],
       "@narrative-os/companion": ["./packages/companion/src/index.ts"],
       "@narrative-os/engines": ["./packages/engines/src/index.ts"],
-      "@narrative-os/pipeline": ["./packages/pipeline/src/index.ts"]
+      "@narrative-os/pipeline": ["./packages/pipeline/src/index.ts"],
+      "@narrative-os/agents": ["./packages/agents/src/index.ts"]
     }
   },
   "include": ["packages/*/src/**/*", "apps/*/src/**/*"]

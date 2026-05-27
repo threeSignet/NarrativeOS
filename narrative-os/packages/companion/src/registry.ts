@@ -218,6 +218,49 @@ class CompanionToolRegistry {
   private registerUtilityTools(): void {
     this.register({
       definition: {
+        name: "semantic_search",
+        description: "语义搜索项目中的相关数据（设定、章节、记忆事件）。当用户的问题可能涉及项目已有数据时调用，比关键词搜索更智能。",
+        parameters: {
+          type: "object",
+          properties: {
+            query: { type: "string", description: "搜索查询文本，用自然语言描述用户想找的内容" },
+            sourceType: { type: "string", description: "可选过滤：setting_item / chapter_chunk / memory_event / event_summary" },
+            limit: { type: "integer", description: "返回条数上限，默认 8" },
+          },
+          required: ["query"],
+        },
+      },
+      execute: async (args, ctx) => {
+        const { EmbeddingPipeline } = await import("@narrative-os/database");
+        const pipeline = EmbeddingPipeline.getInstance();
+        if (!pipeline) {
+          return { data: { error: "Embedding pipeline not initialized" }, display: "语义搜索不可用" };
+        }
+        const results = await pipeline.searchForCompanion(
+          ctx.projectId,
+          args.query as string,
+          (args.limit as number) || 8
+        );
+        const sourceFilter = args.sourceType as string | undefined;
+        const filtered = sourceFilter ? results.filter((r) => r.sourceType === sourceFilter) : results;
+        return {
+          data: {
+            query: args.query,
+            total: filtered.length,
+            results: filtered.map((r) => ({
+              sourceType: r.sourceType,
+              sourceId: r.sourceId,
+              text: r.chunkText.substring(0, 200),
+              similarity: r.similarity,
+            })),
+          },
+          display: `语义搜索「${args.query}」找到 ${filtered.length} 条结果`,
+        };
+      },
+    });
+
+    this.register({
+      definition: {
         name: "update_activity",
         description: "更新窗口头部的活动状态。对话主题变化时或每次回复时都可以调用，让活动状态始终有趣、与小说相关。",
         parameters: {

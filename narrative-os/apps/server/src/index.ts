@@ -6,6 +6,9 @@ import { sql } from "drizzle-orm";
 import { db } from "@narrative-os/database";
 import { wsBus } from "./ws-bus";
 import { EngineScheduler } from "@narrative-os/pipeline";
+import { VectorService } from "@narrative-os/database";
+import { EmbeddingPipeline } from "@narrative-os/database";
+import { createEmbeddingProvider } from "@narrative-os/llm-client";
 import projects from "./routes/projects";
 import sessions from "./routes/sessions";
 import llmLogs from "./routes/llm-logs";
@@ -13,6 +16,7 @@ import hatch, { injectScheduler, orchestrator as hatchOrchestrator } from "./rou
 import brainstorm from "./routes/brainstorm";
 import companion from "./routes/companion";
 import outline from "./routes/outline";
+import vector from "./routes/vector";
 
 const app = new Hono();
 app.use(cors({
@@ -32,6 +36,7 @@ app.route("/", hatch);
 app.route("/brainstorm", brainstorm);
 app.route("/companion", companion);
 app.route("/outline", outline);
+app.route("/vector", vector);
 
 // ── WebSocket setup ──
 const { injectWebSocket, upgradeWebSocket } = createNodeWebSocket({ app });
@@ -71,6 +76,10 @@ app.get(
 
 // ── Engine Scheduler ──
 // 将 hatch 路由的 orchestrator 注入 scheduler，避免双实例导致 WS 通知丢失
+// ── 初始化向量服务与嵌入管线 ──
+const vectorService = new VectorService(db, createEmbeddingProvider());
+EmbeddingPipeline.initialize(vectorService);
+
 const scheduler = new EngineScheduler({
   orchestrator: hatchOrchestrator,
   onProposalsStaged: (projectId, proposalIds) => {

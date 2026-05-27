@@ -1,4 +1,4 @@
-import { db, projects, settingItems, aiProposals, mouStates, sessions, projectScales } from "@narrative-os/database";
+import { db, projects, settingItems, aiProposals, mouStates, sessions, projectScales, projectSettings } from "@narrative-os/database";
 import { eq, and, sql } from "drizzle-orm";
 import { getEngine } from "@narrative-os/engines";
 import { Orchestrator } from "./orchestrator";
@@ -110,6 +110,10 @@ export class EngineScheduler {
           error: `Proactive engine error: ${err.message}`,
         });
       });
+      // 异步触发章节向量嵌入
+      this.embedChapter(event.projectId, event.chapterId).catch((err: Error) => {
+        console.error(`[scheduler] Chapter embedding error: ${err.message}`);
+      });
     });
   }
 
@@ -122,17 +126,19 @@ export class EngineScheduler {
    * 返回 null 表示没有待运行的引擎（可能有 pending 提案或已完成）。
    */
   async getNextEngine(projectId: string): Promise<{ name: string; phase: string; hatchGroup?: string } | null> {
+    // 查询阶段完成状态
+    const [settings] = await db
+      .select({ hatchSummary: projectSettings.hatchSummary })
+      .from(projectSettings)
+      .where(eq(projectSettings.projectId, projectId));
+    const phaseStatus = (settings?.hatchSummary as any)?.phaseStatus || {};
+
     // 查询已确认的引擎产出（settingItems + projectScales）
     const confirmedItems = await db
       .select({ engineSource: settingItems.engineSource })
       .from(settingItems)
       .where(and(eq(settingItems.projectId, projectId), eq(settingItems.status, "confirmed")));
     const confirmedEngines = new Set(confirmedItems.map((i) => i.engineSource).filter(Boolean) as string[]);
-
-    // geography 引擎同时写入 projectScales，如果 settingItems 有产出则视为完成
-    // 此处不再需要额外检查 projectScales — geography 引擎一定会在 settingItems 中写入 parent item
-
-    // scale-designer 已合入 geography 引擎，不再需要独立检查
 
     // 查询 pending 提案
     const pendingProposals = await db
@@ -153,8 +159,16 @@ export class EngineScheduler {
       return { name: revisionRequested[0].sourceNode!, phase: "waiting" };
     }
 
-    // 使用依赖图计算可运行的引擎
-    const { getRunnableEngines, HATCH_ENGINES } = await import("@narrative-os/engines");
+    // 阶段检查：geography 阶段需要用户确认完成才能推进到后续引擎
+    // 如果 geography 已有 confirmed 产出但用户未确认阶段完成，提示用户确认
+    const geographyHasOutput = confirmedEngines.has("geography");
+    const geographyPhaseCompleted = phaseStatus.geography === "completed";
+    if (geographyHasOutput && !geographyPhaseCompleted) {
+      // geography 有产出但未确认完成，提示用户确认阶段
+      return { name: "geography", phase: "waiting_phase_confirmation", hatchGroup: "world" };
+    }
+
+    // 使用依赖图计算可运行的引擎（getRunnableEngines 和 HATCH_ENGINES 已在顶部静态导入）
     const runnable = getRunnableEngines(confirmedEngines, pendingEngines);
     const hatchRunnable = runnable.filter((e) => HATCH_ENGINES.some((he) => he.name === e.name));
 
@@ -193,9 +207,10 @@ export class EngineScheduler {
    * 前端不再做任何编排判定，所有阶段判定在此方法中完成。
    */
   async getNextPhase(projectId: string): Promise<{
-    phase: "waiting_approval" | "waiting_revision" | "engine_ready" | "refinement_ready" | "complete";
+    phase: "waiting_approval" | "waiting_revision" | "engine_ready" | "waiting_user_action" | "waiting_phase_confirmation" | "complete";
     engine?: string;
     pendingCount?: number;
+    refinableCount?: number;
     refinement?: { parentItemId: string; parentName: string; parentScale: string; targetScale: string; engineSource: string };
   }> {
     // 1) 有待审批提案 → 等待用户操作
@@ -221,13 +236,14 @@ export class EngineScheduler {
       return { phase: "waiting_revision", engine: revisionProposals[0].sourceNode || undefined };
     }
 
-    // 3) 检查是否需要细化
+    // 3) 检查是否需要细化（不再自动触发，仅提示前端有待细化条目）
     const refinable = await this.getItemsNeedingRefinement(projectId);
     if (refinable.length > 0) {
       const first = refinable[0];
-      console.log(`[scheduler.getNextPhase] → refinement_ready: ${first.engineSource}/${first.name} (${first.scale}→${first.targetScale}), 还有 ${refinable.length - 1} 个排队`);
+      console.log(`[scheduler.getNextPhase] → waiting_user_action: ${refinable.length} 个条目待细化，首个 ${first.engineSource}/${first.name} (${first.scale}→${first.targetScale})`);
       return {
-        phase: "refinement_ready",
+        phase: "waiting_user_action",
+        refinableCount: refinable.length,
         engine: first.engineSource,
         refinement: {
           parentItemId: first.id,
@@ -244,6 +260,12 @@ export class EngineScheduler {
     if (next && (next.phase === "streaming" || next.phase === "world_complete")) {
       console.log(`[scheduler.getNextPhase] → engine_ready: ${next.name} (phase=${next.phase}, group=${next.hatchGroup})`);
       return { phase: "engine_ready", engine: next.name };
+    }
+
+    // 4b) 阶段等待确认（如 geography 有产出但未确认完成）
+    if (next && next.phase === "waiting_phase_confirmation") {
+      console.log(`[scheduler.getNextPhase] → waiting_phase_confirmation: ${next.name}`);
+      return { phase: "waiting_phase_confirmation", engine: next.name };
     }
 
     // 5) 已完成
@@ -287,6 +309,20 @@ export class EngineScheduler {
     // scale-designer 已合入 geography 引擎，不再需要独立检查
     console.log(`[scheduler] Confirmed engines: ${[...confirmedEngines].join(", ") || "none"}`);
 
+    // 阶段检查：geography 阶段需要用户确认完成才能自动推进到后续引擎
+    // 与 getNextEngine 保持一致，防止 onProposalsResolved 绕过阶段确认
+    const [settings] = await db
+      .select({ hatchSummary: projectSettings.hatchSummary })
+      .from(projectSettings)
+      .where(eq(projectSettings.projectId, projectId));
+    const phaseStatus = (settings?.hatchSummary as any)?.phaseStatus || {};
+    const geographyHasOutput = confirmedEngines.has("geography");
+    const geographyPhaseCompleted = phaseStatus.geography === "completed";
+    if (geographyHasOutput && !geographyPhaseCompleted) {
+      console.log(`[scheduler] Geography phase has output but not confirmed, skip auto-advance`);
+      return;
+    }
+
     // 查询 pending 提案对应的引擎
     const pendingProposals = await db
       .select({ sourceNode: aiProposals.sourceNode })
@@ -318,7 +354,7 @@ export class EngineScheduler {
       console.log(`[scheduler] Revision requested for ${engineName}, re-running...`);
       if (engineName) {
         // 清除旧的 revision_requested 记录，防止死循环
-        await db
+        const supersededProposals = await db
           .update(aiProposals)
           .set({ status: "superseded" })
           .where(
@@ -327,16 +363,14 @@ export class EngineScheduler {
               eq(aiProposals.sourceNode, engineName),
               eq(aiProposals.status, "revision_requested")
             )
-          );
-        await db
-          .update(mouStates)
-          .set({ status: "superseded", decidedAt: new Date() })
-          .where(
-            and(
-              eq(mouStates.projectId, projectId),
-              eq(mouStates.status, "revision_requested")
-            )
-          );
+          )
+          .returning({ id: aiProposals.id });
+        for (const sp of supersededProposals) {
+          await db
+            .update(mouStates)
+            .set({ status: "superseded", decidedAt: new Date() })
+            .where(eq(mouStates.proposalId, sp.id));
+        }
         await this.runSingleEngine(projectId, project.genre, engineName);
         return;
       }
@@ -380,11 +414,10 @@ export class EngineScheduler {
   /**
    * Called after user approves/rejects all pending proposals.
    *
-   * 多 pass 细化策略：
+   * 当前策略：
    * 1. 检查是否还有 pending 提案 → 如有，等待
-   * 2. 检查已确认条目是否需要细化 → 如有，自动触发细化
-   * 3. 细化完成后回到步骤 1
-   * 4. 没有细化需求 → 移动到下一个引擎
+   * 2. 不再自动运行细化循环（由用户手动触发）
+   * 3. 推进到下一个引擎
    */
   async onProposalsResolved(projectId: string): Promise<void> {
     await new Promise((r) => setTimeout(r, 500));
@@ -402,23 +435,10 @@ export class EngineScheduler {
 
     if (stillPending.length > 0) return;
 
-    // 2. 细化循环：自动细化 + 自动审批，直到全部完成
-    await this.runRefinementLoop(projectId);
+    // 2. 不再自动运行细化循环 — 细化由用户手动触发
+    //    用户通过前端按钮或 API 调用 scheduler.refineItem() 触发细化
 
-    // 3. 细化全部完成 → 推进到下一个引擎
-    // 再次检查 pending（runRefinementLoop 可能留下了 pending 提案）
-    const pendingAfterRefine = await db
-      .select({ id: mouStates.id })
-      .from(mouStates)
-      .where(
-        and(
-          eq(mouStates.projectId, projectId),
-          eq(mouStates.status, "pending")
-        )
-      );
-
-    if (pendingAfterRefine.length > 0) return;
-
+    // 3. 没有 pending 且没有待细化 → 推进到下一个引擎
     await this.runMissingEngines(projectId);
   }
 
@@ -544,6 +564,26 @@ export class EngineScheduler {
     engineName: string,
     extraContext?: Record<string, unknown>
   ): Promise<void> {
+    // 检查项目状态，防止在错误状态下运行引擎
+    const [project] = await db
+      .select({ status: projects.status })
+      .from(projects)
+      .where(eq(projects.id, projectId));
+    const isHatchingEngine = HATCH_ENGINE_NAMES.includes(engineName);
+    const isProactiveEngine = engineRegistry.get(engineName)?.mode === "proactive";
+    if (!project) {
+      console.warn(`[scheduler] runSingleEngine: project ${projectId} not found`);
+      return;
+    }
+    if (isHatchingEngine && project.status !== "hatching") {
+      console.log(`[scheduler] runSingleEngine: project ${projectId} not in hatching status (${project.status}), skip`);
+      return;
+    }
+    if (isProactiveEngine && project.status !== "active") {
+      console.log(`[scheduler] runSingleEngine: project ${projectId} not in active status (${project.status}), skip proactive engine`);
+      return;
+    }
+
     try {
       this.setRunning(projectId, engineName, true);
       this.emit({ type: "engine_started", projectId, node: engineName });
@@ -731,11 +771,8 @@ export class EngineScheduler {
               targetScale: childScale.key,
               engineSource: item.engineSource,
             });
-            // 修复条目的 content，补上缺失的 scale
-            await db
-              .update(settingItems)
-              .set({ content: { ...content, scale: firstScale }, updatedAt: new Date() })
-              .where(eq(settingItems.id, item.id));
+            // NOTE: 不在读取路径中修改 DB。缺失的 scale 应由审批 handler 在创建/更新条目时写入。
+            // 如果需要修复存量数据，应通过独立的数据修复脚本或 API 完成。
           }
         } else {
           skippedReasons.push(`"${item.name}": needs_refinement=true 但无 scale 且无项目尺度链`);
@@ -867,6 +904,21 @@ export class EngineScheduler {
     const set = this.running.get(projectId)!;
     if (value) set.add(engine);
     else set.delete(engine);
+  }
+
+  // ─────────────────────────────────────────────
+  // 向量嵌入触发
+  // ─────────────────────────────────────────────
+
+  private async embedChapter(projectId: string, chapterId: string): Promise<void> {
+    const { EmbeddingPipeline } = await import("@narrative-os/database");
+    const pipeline = EmbeddingPipeline.getInstance();
+    if (!pipeline) {
+      console.warn(`[scheduler] EmbeddingPipeline not initialized, skipping chapter embed`);
+      return;
+    }
+    console.log(`[scheduler] Embedding chapter ${chapterId}...`);
+    await pipeline.embedChapter(projectId, chapterId);
   }
 
   private emit(event: SchedulerEvent) {

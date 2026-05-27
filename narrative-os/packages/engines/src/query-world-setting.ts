@@ -16,6 +16,14 @@ import { eq, and, or, ilike, inArray, sql } from "drizzle-orm";
 // ── 查询参数 ──
 
 export interface QueryWorldSettingParams {
+  /** 按精确 ID 查询单条设定 */
+  id?: string;
+  /** 按多个 ID 批量查询 */
+  ids?: string[];
+  /** 按父条目 ID 查询子树 */
+  parentItemId?: string;
+  /** 按地理尺度筛选（如 "continent", "city", "scene"） */
+  scale?: string;
   /** 按引擎名筛选，如 "character"、"geography" */
   engine?: string;
   /** 按设定类型筛选，如 "character"、"power_system" */
@@ -116,6 +124,26 @@ async function queryFromLive(
   // 按子类型筛选
   if (params.subtype) {
     conditions.push(eq(settingItems.itemSubtype, params.subtype));
+  }
+
+  // 按精确 ID 查询（最高优先级）
+  if (params.id) {
+    conditions.push(eq(settingItems.id, params.id));
+  }
+
+  // 按多个 ID 批量查询
+  if (params.ids && params.ids.length > 0) {
+    conditions.push(inArray(settingItems.id, params.ids));
+  }
+
+  // 按父条目 ID 查询子树
+  if (params.parentItemId) {
+    conditions.push(eq(settingItems.parentItemId, params.parentItemId));
+  }
+
+  // 按地理尺度筛选（在 content JSONB 中搜索 scale 字段）
+  if (params.scale) {
+    conditions.push(sql`${settingItems.content}->>'scale' = ${params.scale}`);
   }
 
   // 按名称搜索

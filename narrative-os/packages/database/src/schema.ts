@@ -800,6 +800,8 @@ export const projectScales = pgTable(
   {
     id: uuid("id").primaryKey().defaultRandom(),
     projectId: uuid("project_id").notNull().references(() => projects.id),
+    // 关联到顶层世界/空间域的 setting_item_id，null 表示全局默认尺度链
+    worldItemId: uuid("world_item_id").references(() => settingItems.id),
     key: text("key").notNull(),              // 尺度标识符 (e.g. "spirit_realm", "continent")
     label: text("label").notNull(),           // 中文标签 (e.g. "灵界", "大陆")
     parentKey: text("parent_key"),            // 父级尺度的 key，顶级为 null
@@ -811,5 +813,72 @@ export const projectScales = pgTable(
   (table) => ({
     projectKeyIdx: index("project_scales_project_key_idx").on(table.projectId, table.key),
     projectParentIdx: index("project_scales_parent_idx").on(table.projectId, table.parentKey),
+    worldItemIdx: index("project_scales_world_item_idx").on(table.worldItemId),
+  })
+);
+
+// ============================================================================
+// 章节设定引用追踪 —— 记录每章精确引用了哪些设定条目（通过ID关联）
+// ============================================================================
+export const chapterSettingReferences = pgTable(
+  "chapter_setting_references",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    chapterId: uuid("chapter_id").notNull().references(() => chapters.id),
+    settingItemId: uuid("setting_item_id").notNull().references(() => settingItems.id),
+    referenceType: text("reference_type", { enum: ["direct", "mentioned", "background"] })
+      .notNull()
+      .default("direct"),
+    contextQuote: text("context_quote"),
+    createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+  },
+  (table) => ({
+    chapterIdx: index("csr_chapter_idx").on(table.chapterId),
+    settingIdx: index("csr_setting_idx").on(table.settingItemId),
+    uniqueRef: index("csr_unique_idx").on(table.chapterId, table.settingItemId),
+  })
+);
+
+// ============================================================================
+// 向量嵌入表 —— 语义检索（按 project_id 分区，Drizzle 做基础 ORM 映射）
+// 注意：pgvector 的 vector 类型和分区机制通过 raw SQL 管理，
+//       此处仅做类型定义以支持 Drizzle 查询和关系映射。
+// ============================================================================
+export const embeddings = pgTable(
+  "embeddings",
+  {
+    embeddingId: uuid("embedding_id").notNull().defaultRandom(),
+    projectId: uuid("project_id").notNull(),
+    sourceType: text("source_type").notNull(),
+    sourceId: uuid("source_id").notNull(),
+    chunkIndex: integer("chunk_index").notNull().default(0),
+    chunkText: text("chunk_text").notNull(),
+    chunkLength: integer("chunk_length").notNull().default(0),
+    embedding: text("embedding"), // pgvector vector 类型，Drizzle 不支持，存为文本在应用层处理
+    metaJsonb: jsonb("meta_jsonb").notNull().default({}),
+    createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+  },
+  (table) => ({
+    projectSourceIdx: index("embeddings_project_source_idx").on(table.projectId, table.sourceType, table.sourceId),
+    projectChunkIdx: index("embeddings_project_chunk_idx").on(table.projectId, table.chunkIndex),
+  })
+);
+
+// ============================================================================
+// 设定条目版本历史 —— 记录每条设定的完整变更历史
+// ============================================================================
+export const settingItemVersions = pgTable(
+  "setting_item_versions",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    settingItemId: uuid("setting_item_id").notNull().references(() => settingItems.id),
+    version: integer("version").notNull(),
+    content: jsonb("content").notNull(),
+    changedBy: text("changed_by"),
+    changeReason: text("change_reason"),
+    createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+  },
+  (table) => ({
+    itemIdx: index("siv_item_idx").on(table.settingItemId, table.version),
   })
 );

@@ -11,3 +11,9 @@ export { getModelMeta, MODEL_REGISTRY } from "./models";
 export type { ModelMeta } from "./models";
 export { PRICING_TABLE, calculateCost } from "./cost";
 export type { Pricing, CostInput, CostResult } from "./cost";
+export {
+  SiliconFlowEmbeddingProvider,
+  createEmbeddingProvider,
+  loadEmbeddingConfig,
+} from "./embedding-provider";
+export type { EmbeddingConfig } from "./embedding-provider";

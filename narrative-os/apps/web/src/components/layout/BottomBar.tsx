@@ -19,7 +19,7 @@ export default function BottomBar({ onOpenProposalList }: {
 
   const flowState = useMemo<'IDLE' | 'AI_PROCESSING' | 'REVIEWING' | 'EXECUTING' | 'WORLD_DONE'>(() => {
     if (companionStreaming || phase === 'streaming') return 'AI_PROCESSING'
-    if (phase === 'waiting') return 'REVIEWING'
+    if (phase === 'waiting' || phase === 'waiting_phase_confirmation') return 'REVIEWING'
     if (phase === 'world_complete') return 'WORLD_DONE'
     const hasExecuting = proposals.some((p) => p.status === 'approved')
     if (hasExecuting && phase === 'idle') return 'EXECUTING'
@@ -92,6 +92,7 @@ export default function BottomBar({ onOpenProposalList }: {
           <span style={{ fontWeight: 500, color: 'var(--text-secondary)' }}>
             {phase === 'streaming' ? (currentEngine ? `生成:${engineLabelMap[currentEngine] || currentEngine}` : 'GEN')
               : phase === 'waiting' ? (currentEngine ? `等待:${engineLabelMap[currentEngine] || currentEngine}` : 'WAIT')
+              : phase === 'waiting_phase_confirmation' ? 'PHASE_CONFIRM'
               : phase === 'world_complete' ? 'WORLD_DONE'
               : 'IDLE'}
           </span>

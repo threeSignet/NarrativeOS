@@ -81,16 +81,14 @@ export default function ProjectEditor() {
     return () => { realtimeDisconnect() }
   }, [id, realtimeConnect, realtimeDisconnect])
 
-  // hatchPhase 在 useEffect 中使用，必须先声明
-  const hatchPhase = useHatchStore((s) => s.phase)
-
   useEffect(() => {
     // WS new_proposals：仅跨 tab 同步用。streaming 期间忽略（SSE done 统一驱动）
+    // 使用 getState() 避免 stale closure，确保获取最新 phase
     const unsubNew = realtimeOn('new_proposals', () => {
-      if (id && hatchPhase !== 'streaming') { fetchProposals(id); fetchEngines(id); }
+      if (id && useHatchStore.getState().phase !== 'streaming') { fetchProposals(id); fetchEngines(id); }
     })
     const unsubStaged = realtimeOn('proposals_staged', () => {
-      if (id && hatchPhase !== 'streaming') { fetchProposals(id); fetchEngines(id); }
+      if (id && useHatchStore.getState().phase !== 'streaming') { fetchProposals(id); fetchEngines(id); }
     })
     const unsubStarted = realtimeOn('engine_started', (event: any) => {
       const engineName = event.payload?.node as string
@@ -116,7 +114,7 @@ export default function ProjectEditor() {
       unsubNew(); unsubStaged(); unsubStarted(); unsubCompleted()
       unsubChunk(); unsubModel(); unsubUsage(); unsubDone(); unsubError(); unsubPhaseChanged()
     }
-  }, [id, fetchEngines, fetchProposals, setCurrentEngine, realtimeOn, hatchPhase])
+  }, [id, fetchEngines, fetchProposals, setCurrentEngine, realtimeOn])
 
   // ── Store subscriptions (minimal — only what the orchestrator needs) ──
   const phase = useHatchStore((s) => s.phase)
@@ -137,6 +135,8 @@ export default function ProjectEditor() {
   const autoPopupProposalId = useHatchStore((s) => s.autoPopupProposalId)
   const dismissAutoPopup = useHatchStore((s) => s.dismissAutoPopup)
   const setProposalListOpen = useHatchStore((s) => s.setProposalListOpen)
+  const relations = useHatchStore((s) => s._relations)
+  const phaseConfirmationTarget = useHatchStore((s) => s.phaseConfirmationTarget)
 
   const companionActivityText = useCompanionStore((s) => s.activityText)
   const companionActivityColor = useCompanionStore((s) => s.activityColor)
@@ -178,11 +178,11 @@ export default function ProjectEditor() {
   // ── Auto-popup MOU ──
   // 仅在非 streaming 状态下弹出 MOU，防止 LLM 流式输出未完成时弹出审批弹窗
   useEffect(() => {
-    if (autoPopupProposalId && !mouProposal && hatchPhase !== 'streaming') {
+    if (autoPopupProposalId && !mouProposal && useHatchStore.getState().phase !== 'streaming') {
       const p = proposals.find((p) => p.id === autoPopupProposalId)
       if (p) setMouProposal(p)
     }
-  }, [autoPopupProposalId, proposals, mouProposal, hatchPhase])
+  }, [autoPopupProposalId, proposals, mouProposal])
 
   // ── MOU handlers ──
   const handleApprove = useCallback(async (proposalId: string) => {
@@ -282,7 +282,7 @@ export default function ProjectEditor() {
   })
   const outlineWindows = windows.filter((w) => w.type === 'outline-detail')
 
-  const editorContent = (isHatching || phase === 'streaming' || phase === 'waiting' || phase === 'world_complete') ? (
+  const editorContent = (isHatching || phase === 'streaming' || phase === 'waiting' || phase === 'waiting_phase_confirmation' || phase === 'world_complete') ? (
     <HatchingView
       project={project}
       phase={phase}
@@ -295,6 +295,11 @@ export default function ProjectEditor() {
       onStart={() => startHatching(project.id)}
       hatchGroup={hatchGroup}
       onStartStudio={() => startStudioPhase(project.id)}
+      phaseConfirmationTarget={phaseConfirmationTarget}
+      onCompletePhase={(phase) => {
+        const completePhase = useHatchStore.getState().completePhase
+        completePhase(project.id, phase)
+      }}
     />
   ) : editorView === 'outline' ? (
     <OutlineOverviewView
@@ -484,7 +489,7 @@ export default function ProjectEditor() {
           <Window key={win.id} window={win}>
             <GeographyView
               settingItems={settingItems}
-              relations={useHatchStore.getState()._relations || []}
+              relations={relations || []}
               projectId={project.id}
               onClose={() => closeWindow(win.id)}
             />

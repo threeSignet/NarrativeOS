@@ -1,7 +1,8 @@
 import { useState, useMemo, useRef, useEffect, useCallback } from 'react'
-import { Plus, MapPin, Mountain, Building2, X, Loader2 } from 'lucide-react'
+import { Plus, MapPin, Mountain, Building2, X, Loader2, Check } from 'lucide-react'
 import type { SettingItem } from '../../stores/hatch'
 import { apiPost } from '../../api/client'
+import { useHatchStore } from '../../stores/hatch'
 import Dropdown from '../ui/Dropdown'
 import { SUBTYPE_LABELS, CONTENT_LABELS, SCALE_ORDER, SCALE_LABELS, formatContent } from '../../utils/labels'
 import type { MapScale } from '../../utils/labels'
@@ -157,6 +158,21 @@ export default function GeographyView({ settingItems, relations, projectId, onCl
   const [createLoading, setCreateLoading] = useState(false)
   const [createResult, setCreateResult] = useState<string | null>(null)
 
+  const [refiningId, setRefiningId] = useState<string | null>(null)
+  const [refineMsg, setRefineMsg] = useState<string | null>(null)
+  const [completeMsg, setCompleteMsg] = useState<string | null>(null)
+  const [completedIds, setCompletedIds] = useState<Set<string>>(() =>
+    new Set(settingItems.filter((i) => i.content?.needs_refinement === false).map((i) => i.id))
+  )
+
+  // 当 settingItems 从后端刷新时，同步已完成 ID（解决页面刷新后丢失的问题）
+  useEffect(() => {
+    setCompletedIds((prev) => {
+      const fromData = new Set(settingItems.filter((i) => i.content?.needs_refinement === false).map((i) => i.id))
+      return new Set([...prev, ...fromData])
+    })
+  }, [settingItems])
+
   // 当前层级的尺度（用于显示标签和创建表单默认值）
   const currentScale = currentParent?.scale ||
     (visibleNodes.length > 0 ? visibleNodes[0].scale : 'continent' as MapScale)
@@ -275,6 +291,37 @@ export default function GeographyView({ settingItems, relations, projectId, onCl
     const used = new Set(nodes.map((n) => n.scale))
     return SCALE_ORDER.filter((s) => used.has(s))
   }, [nodes])
+
+  useEffect(() => {
+    setRefineMsg(null)
+    setCompleteMsg(null)
+  }, [selectedNode?.id])
+
+  const handleRefine = async (node: GeoNode) => {
+    setRefiningId(node.id)
+    setRefineMsg(null)
+    try {
+      await apiPost(`/geography/refine/${node.id}`, {})
+      setRefineMsg('细化请求已提交，正在生成子区域提案…')
+      await useHatchStore.getState().fetchSettings(projectId)
+    } catch (err: any) {
+      setRefineMsg(`细化失败：${err.message}`)
+    } finally {
+      setRefiningId(null)
+    }
+  }
+
+  const handleComplete = async (node: GeoNode) => {
+    setCompleteMsg(null)
+    try {
+      await apiPost(`/settings/items/${node.id}/complete-refinement`, {})
+      setCompleteMsg('已标记完成')
+      setCompletedIds((prev) => new Set(prev).add(node.id))
+      await useHatchStore.getState().fetchSettings(projectId)
+    } catch (err: any) {
+      setCompleteMsg(`标记失败：${err.message}`)
+    }
+  }
 
   const handleCreate = async () => {
     if (!createForm.name.trim() || !createForm.description.trim()) return
@@ -633,8 +680,62 @@ export default function GeographyView({ settingItems, relations, projectId, onCl
                 </button>
               </div>
             </div>
-            <div style={{ fontSize: 14, fontWeight: 600, color: 'var(--text-primary)', marginBottom: 4 }}>{selectedNode.name}</div>
+            <div style={{ fontSize: 14, fontWeight: 600, color: 'var(--text-primary)', marginBottom: 4, display: 'flex', alignItems: 'center', gap: 6 }}>
+              {selectedNode.name}
+              {completedIds.has(selectedNode.id) && (
+                <span style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', width: 16, height: 16, borderRadius: '50%', background: 'rgba(134,239,172,0.15)', color: 'var(--accent-mint)' }}>
+                  <Check size={10} />
+                </span>
+              )}
+            </div>
             <div style={{ fontSize: 11, color: 'var(--text-secondary)', lineHeight: 1.5, marginBottom: 8 }}>{selectedNode.summary}</div>
+            {selectedNode.content?.needs_refinement === true && !completedIds.has(selectedNode.id) && (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 6, marginBottom: 10 }}>
+                <div style={{ display: 'flex', gap: 6 }}>
+                  <button onClick={() => handleRefine(selectedNode)} disabled={refiningId === selectedNode.id}
+                    style={{
+                      display: 'inline-flex', alignItems: 'center', gap: 4,
+                      padding: '5px 10px', borderRadius: 6, border: '1px solid rgba(196,181,253,0.20)',
+                      background: 'rgba(196,181,253,0.10)', color: 'var(--accent-violet)',
+                      fontSize: 11, fontWeight: 500, cursor: 'pointer', fontFamily: 'var(--font-ui)',
+                      opacity: refiningId === selectedNode.id ? 0.5 : 1,
+                    }}>
+                    {refiningId === selectedNode.id ? <Loader2 size={12} style={{ animation: 'spin 1s linear infinite' }} /> : '🔍'}
+                    {refiningId === selectedNode.id ? '细化中...' : '细化此区域'}
+                  </button>
+                  <button onClick={() => handleComplete(selectedNode)} disabled={refiningId === selectedNode.id}
+                    style={{
+                      display: 'inline-flex', alignItems: 'center', gap: 4,
+                      padding: '5px 10px', borderRadius: 6, border: '1px solid rgba(134,239,172,0.20)',
+                      background: 'rgba(134,239,172,0.10)', color: 'var(--accent-mint)',
+                      fontSize: 11, fontWeight: 500, cursor: 'pointer', fontFamily: 'var(--font-ui)',
+                      opacity: refiningId === selectedNode.id ? 0.5 : 1,
+                    }}>
+                    ✅ 标记完成
+                  </button>
+                </div>
+                {refineMsg && (
+                  <div style={{
+                    padding: '4px 8px', borderRadius: 4, fontSize: 10,
+                    background: refineMsg.includes('失败') ? 'rgba(252,165,165,0.06)' : 'rgba(134,239,172,0.06)',
+                    color: refineMsg.includes('失败') ? 'var(--accent-rose)' : 'var(--accent-mint)',
+                    border: `1px solid ${refineMsg.includes('失败') ? 'rgba(252,165,165,0.12)' : 'rgba(134,239,172,0.12)'}`,
+                  }}>
+                    {refineMsg}
+                  </div>
+                )}
+                {completeMsg && (
+                  <div style={{
+                    padding: '4px 8px', borderRadius: 4, fontSize: 10,
+                    background: completeMsg.includes('失败') ? 'rgba(252,165,165,0.06)' : 'rgba(134,239,172,0.06)',
+                    color: completeMsg.includes('失败') ? 'var(--accent-rose)' : 'var(--accent-mint)',
+                    border: `1px solid ${completeMsg.includes('失败') ? 'rgba(252,165,165,0.12)' : 'rgba(134,239,172,0.12)'}`,
+                  }}>
+                    {completeMsg}
+                  </div>
+                )}
+              </div>
+            )}
             <button onClick={() => drillDown(selectedNode)} style={{
                 display: 'inline-flex', alignItems: 'center', gap: 4,
                 padding: '5px 12px', marginBottom: 8, borderRadius: 6,

@@ -1,7 +1,7 @@
 import { Engine } from "../base";
 import type { Proposal, EngineContext } from "../types";
 import type { Message } from "@narrative-os/llm-client";
-import { db, chapters, settingItems } from "@narrative-os/database";
+import { db, chapters, settingItems, EmbeddingPipeline } from "@narrative-os/database";
 import { eq, and } from "drizzle-orm";
 
 /**
@@ -79,6 +79,7 @@ export class MemoryExtractorEngine extends Engine {
               "should_be_retrievable_by": ["关键词1", "关键词2"],
               "affected_world_items": [
                 {
+                  "item_id": "受影响的已确认设定条目的数据库UUID（必须精确引用）",
                   "item_name": "受影响的已确认设定条目名称（必须精确引用）",
                   "item_type": "条目类型（character/faction/geography 等）",
                   "change_description": "描述该条目因本章事件而产生的状态变化（如：角色从Lv3升级到Lv4、势力失去了某领土）",
@@ -123,6 +124,78 @@ export class MemoryExtractorEngine extends Engine {
     } catch {
       return [{ type: "error", title: "记忆提取", content: { reasoning: "解析失败", payload: {} } }];
     }
+  }
+
+  /**
+   * 覆盖 postProcessProposals：对记忆提取结果进行语义去重。
+   */
+  protected override async postProcessProposals(proposals: Proposal[], ctx: EngineContext): Promise<Proposal[]> {
+    return this.deduplicateProposals(proposals, ctx.projectId);
+  }
+
+  /**
+   * 语义去重：检查提取的记忆事件是否与已有嵌入高度相似。
+   * 使用 VectorService 的 similaritySearch 进行语义去重。
+   */
+  async deduplicateProposals(proposals: Proposal[], projectId: string): Promise<Proposal[]> {
+    const pipeline = EmbeddingPipeline.getInstance();
+    if (!pipeline) {
+      console.warn(`[memory-extractor] EmbeddingPipeline not initialized, skipping semantic dedup`);
+      return proposals;
+    }
+
+    const deduped: Proposal[] = [];
+    for (const p of proposals) {
+      if (p.type !== "memory_extraction") {
+        deduped.push(p);
+        continue;
+      }
+
+      const items = (p.content?.payload?.items || []) as Array<any>;
+      const filteredItems: typeof items = [];
+
+      for (const item of items) {
+        const eventText = `${item.name || ""}\n${item.summary || ""}`;
+        if (!eventText.trim()) {
+          filteredItems.push(item);
+          continue;
+        }
+
+        try {
+          const dupCheck = await pipeline.checkDuplicate(
+            projectId,
+            eventText,
+            "memory_event",
+            0.88 // 记忆事件去重阈值（比通用阈值更严格）
+          );
+
+          if (dupCheck.isDuplicate) {
+            console.log(
+              `[memory-extractor] Semantic dedup: skipped "${item.name}" (similar to ${dupCheck.similar[0]?.sourceId}, sim=${dupCheck.similar[0]?.similarity.toFixed(3)})`
+            );
+            continue;
+          }
+        } catch (err: any) {
+          console.error(`[memory-extractor] Dedup check failed for "${item.name}":`, err.message);
+        }
+
+        filteredItems.push(item);
+      }
+
+      if (filteredItems.length > 0) {
+        deduped.push({
+          ...p,
+          content: {
+            ...p.content,
+            payload: { ...p.content?.payload, items: filteredItems },
+          },
+        });
+      } else {
+        console.log(`[memory-extractor] All items deduplicated for proposal "${p.title}"`);
+      }
+    }
+
+    return deduped;
   }
 
   protected async buildExtraMessages(ctx: EngineContext): Promise<Message[]> {

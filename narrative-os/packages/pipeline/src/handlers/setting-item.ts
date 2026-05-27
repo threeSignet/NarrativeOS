@@ -163,49 +163,66 @@ export class SettingItemHandler implements ProposalHandler {
       if (!affectedItems || affectedItems.length === 0) continue;
 
       for (const affected of affectedItems) {
-        if (!affected.item_name) continue;
+        // 优先使用 item_id 精确查找，回退到 item_name
+        let existingId: string | undefined = affected.item_id;
 
-        // 查找已确认的设定条目
-        const [existing] = await tx
-          .select({ id: settingItems.id })
-          .from(settingItems)
-          .where(and(
-            eq(settingItems.projectId, proposal.projectId),
-            eq(settingItems.name, affected.item_name),
-            eq(settingItems.status, "confirmed")
-          ))
-          .limit(1);
-
-        if (existing) {
-          // 创建更新提案 — 为 memory_extraction 子提案使用独立 session 标识
-          const chapterNum = (item.content as any)?.chapter_number || 0;
-          const [inserted] = await tx.insert(aiProposals).values({
-            projectId: proposal.projectId,
-            sessionId: proposal.id, // 使用 memory_extraction 的 proposal.id 作为关联标识
-            type: "setting_update",
-            title: `[第${chapterNum}章] ${affected.item_name} 状态更新`,
-            content: {
-              reasoning: `基于第${chapterNum}章事件 "${item.name}"：${affected.change_description || ""}`,
-              payload: { suggestedUpdate: affected.suggested_update, changeDescription: affected.change_description },
-            },
-            sourceNode: "memory-extractor",
-            approvalMode: "manual",
-            status: "pending",
-            targetId: existing.id,
-            targetAction: "update",
-            targetTable: "setting_items",
-          }).returning({ id: aiProposals.id });
-
-          // 同步创建 MOU 状态记录，确保前端能展示审批状态
-          if (inserted) {
-            await tx.insert(mouStates).values({
-              projectId: proposal.projectId,
-              proposalId: inserted.id,
-              status: "pending",
-            });
-          }
-          updateProposalsCreated++;
+        if (existingId) {
+          // 验证 ID 是否存在于当前项目
+          const [found] = await tx
+            .select({ id: settingItems.id })
+            .from(settingItems)
+            .where(and(
+              eq(settingItems.projectId, proposal.projectId),
+              eq(settingItems.id, existingId),
+              eq(settingItems.status, "confirmed")
+            ))
+            .limit(1);
+          if (!found) existingId = undefined; // ID 无效，回退到名称查找
         }
+
+        if (!existingId && affected.item_name) {
+          const [found] = await tx
+            .select({ id: settingItems.id })
+            .from(settingItems)
+            .where(and(
+              eq(settingItems.projectId, proposal.projectId),
+              eq(settingItems.name, affected.item_name),
+              eq(settingItems.status, "confirmed")
+            ))
+            .limit(1);
+          existingId = found?.id;
+        }
+
+        if (!existingId) continue;
+
+        // 创建更新提案 — 为 memory_extraction 子提案使用独立 session 标识
+        const chapterNum = (item.content as any)?.chapter_number || 0;
+        const [inserted] = await tx.insert(aiProposals).values({
+          projectId: proposal.projectId,
+          sessionId: proposal.id, // 使用 memory_extraction 的 proposal.id 作为关联标识
+          type: "setting_update",
+          title: `[第${chapterNum}章] ${affected.item_name || "设定更新"} 状态更新`,
+          content: {
+            reasoning: `基于第${chapterNum}章事件 "${item.name}"：${affected.change_description || ""}`,
+            payload: { suggestedUpdate: affected.suggested_update, changeDescription: affected.change_description },
+          },
+          sourceNode: "memory-extractor",
+          approvalMode: "manual",
+          status: "pending",
+          targetId: existingId,
+          targetAction: "update",
+          targetTable: "setting_items",
+        }).returning({ id: aiProposals.id });
+
+        // 同步创建 MOU 状态记录，确保前端能展示审批状态
+        if (inserted) {
+          await tx.insert(mouStates).values({
+            projectId: proposal.projectId,
+            proposalId: inserted.id,
+            status: "pending",
+          });
+        }
+        updateProposalsCreated++;
       }
     }
 

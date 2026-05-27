@@ -64,10 +64,11 @@ export {
   settingItemRelations, llmLogs, mouStates, notifications,
   notificationReads, projectSettings, outlines, volumes, chapters,
   outlineItems, projectDailyStats, projectScales,
+  chapterSettingReferences, settingItemVersions, embeddings,
 } from "./schema";
 
 // 同时导入值以支持 typeof 类型推断
-import { settingItems, settingItemRelations, aiProposals, projects } from "./schema";
+import { settingItems, settingItemRelations, aiProposals, projects, chapterSettingReferences, settingItemVersions, embeddings } from "./schema";
 export * from "./validation";
 
 // drizzle-orm 行类型推断（用于外部包的类型导入）
@@ -75,6 +76,9 @@ export type SettingItem = typeof settingItems.$inferSelect;
 export type SettingItemRelation = typeof settingItemRelations.$inferSelect;
 export type AiProposal = typeof aiProposals.$inferSelect;
 export type Project = typeof projects.$inferSelect;
+export type ChapterSettingReference = typeof chapterSettingReferences.$inferSelect;
+export type SettingItemVersion = typeof settingItemVersions.$inferSelect;
+export type Embedding = typeof embeddings.$inferSelect;
 
 // ── 向量嵌入 ──
 export {
@@ -93,3 +97,6 @@ export type {
   TextChunk,
   ChunkParams,
 } from "./embedding-types";
+export {
+  EmbeddingPipeline,
+} from "./embedding-pipeline";

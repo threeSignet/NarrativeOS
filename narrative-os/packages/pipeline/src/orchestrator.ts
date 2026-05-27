@@ -393,6 +393,30 @@ export class Orchestrator {
         sourceNode: proposal.sourceNode || undefined,
       });
 
+      // ── 12. 异步触发向量嵌入 ──
+      // 设定条目确认/更新后自动嵌入
+      if (result.itemsCreated > 0) {
+        const { EmbeddingPipeline } = await import("@narrative-os/database");
+        const pipeline = EmbeddingPipeline.getInstance();
+        if (pipeline) {
+          // 获取刚创建的 setting_items 并嵌入
+          const createdItems = (result.executionResult as any)?.itemIds as string[] | undefined;
+          if (createdItems && createdItems.length > 0) {
+            for (const itemId of createdItems) {
+              pipeline.embedSettingItem(proposal.projectId, itemId).catch((err: any) => {
+                console.error(`[orchestrator] Embedding failed for item ${itemId}:`, err.message);
+              });
+            }
+          }
+          // 目标更新也触发嵌入
+          if (proposal.targetId && proposal.targetAction === "update") {
+            pipeline.embedSettingItem(proposal.projectId, proposal.targetId).catch((err: any) => {
+              console.error(`[orchestrator] Embedding failed for updated item ${proposal.targetId}:`, err.message);
+            });
+          }
+        }
+      }
+
       return { executed: result.executed, settingItemsCreated: result.itemsCreated };
     });
   }

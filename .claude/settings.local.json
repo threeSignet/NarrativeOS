@@ -84,7 +84,12 @@
       "Bash(Select-Object Name)",
       "Bash(git init *)",
       "Bash(git remote *)",
-      "Bash(git add *)"
+      "Bash(git add *)",
+      "Bash(python -c \"import sys,json; data=json.loads\\(sys.stdin.buffer.read\\(\\)\\); print\\(data['choices'][0]['message']['content']\\)\")",
+      "Bash(iconv -f utf-8 -t utf-8)"
     ]
+  },
+  "enabledPlugins": {
+    "claude-code-setup@claude-plugins-official": true
   }
 }

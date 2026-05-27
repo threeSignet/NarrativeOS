@@ -298,6 +298,7 @@ app.post("/:projectId/memory/query", async (c) => {
 
   const chapterLimit = Math.min(parseInt(body?.chapterLimit || "10"), 50);
   const includeWorldContext = body?.includeWorldContext !== false;
+  const semanticQuery = body?.semanticQuery as string | undefined;
 
   // 最近章节摘要
   const recentChapters = await db
@@ -322,9 +323,26 @@ app.post("/:projectId/memory/query", async (c) => {
     worldContext = await buildWorldContext(projectId, { detailLevel: "structured" });
   }
 
+  // 语义搜索（如果提供了查询）
+  let semanticResults: any[] = [];
+  if (semanticQuery) {
+    const { EmbeddingPipeline } = await import("@narrative-os/database");
+    const pipeline = EmbeddingPipeline.getInstance();
+    if (pipeline) {
+      const results = await pipeline.searchForCompanion(projectId, semanticQuery, 10);
+      semanticResults = results.map((r) => ({
+        embeddingId: r.embeddingId,
+        chunkText: r.chunkText,
+        sourceType: r.sourceType,
+        sourceId: r.sourceId,
+        similarity: r.similarity,
+      }));
+    }
+  }
+
   return c.json({
     projectId,
-    query: { chapterLimit, includeWorldContext },
+    query: { chapterLimit, includeWorldContext, semanticQuery },
     recentChapters: recentChapters.map((ch) => ({
       id: ch.id,
       chapterNumber: ch.chapterNumber,
@@ -339,6 +357,7 @@ app.post("/:projectId/memory/query", async (c) => {
       role: m.role,
       content: m.content.substring(0, 500), // 截断避免过大响应
     })),
+    semanticResults,
   });
 });
 

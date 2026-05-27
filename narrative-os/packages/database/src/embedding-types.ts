@@ -2,7 +2,7 @@
  * 向量嵌入表 — TypeScript 类型定义
  *
  * 对应数据库表: embeddings (按 project_id 分区)
- * 向量维度: 1536 (OpenAI text-embedding-3-small)
+ * 向量维度: 1024 (BAAI/bge-m3 via SiliconFlow)
  *
  * 设计文档第 4.3.9 节完整 DDL 参考
  */
@@ -25,7 +25,7 @@ export interface EmbeddingRow {
   chunkIndex: number;
   chunkText: string;
   chunkLength: number;
-  /** 1536 维 float 数组 */
+  /** 1024 维 float 数组 */
   embedding: number[];
   metaJsonb: Record<string, unknown>;
   createdAt: Date;
@@ -46,7 +46,7 @@ export interface InsertEmbedding {
 /** 向量相似度检索参数 */
 export interface VectorSearchParams {
   projectId: string;
-  /** 查询向量（1536维） */
+  /** 查询向量（1024维） */
   queryEmbedding: number[];
   /** 按来源类型过滤（可选） */
   sourceType?: EmbeddingSourceType;

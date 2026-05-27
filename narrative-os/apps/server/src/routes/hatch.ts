@@ -12,6 +12,10 @@ import {
 
 const app = new Hono();
 
+// API 安全白名单
+const ALLOWED_PHASES = new Set(["geography", "power-system", "faction", "race", "culture", "history", "technique", "economy", "rules", "character", "conflict", "causality", "item-system", "outline-generator", "volume-outline", "chapter-outline"]);
+const ALLOWED_CREATE_ENGINES = new Set([...ALLOWED_PHASES, "tone", "story-blueprint"]);
+
 // 共享的 Orchestrator 实例（导出给 outline 路由使用）
 // onProposalsStaged 不再发送 WS 通知 — 改由 SSE done 事件统一驱动前端状态变更
 export const orchestrator = new Orchestrator();
@@ -167,7 +171,9 @@ async function executeEngineSSEStream(
  * 保留用于向后兼容，直接转发到 advance。
  */
 app.post("/hatch/:id/stream", async (c) => {
-  return c.redirect(`/hatch/${c.req.param("id")}/advance`, 307);
+  const projectId = c.req.param("id");
+  if (!validateUUID(projectId)) return c.json({ error: "Invalid project ID" }, 400);
+  return c.redirect(`/hatch/${projectId}/advance`, 307);
 });
 
 /**
@@ -186,6 +192,7 @@ app.post("/hatch/:id/stream", async (c) => {
  */
 app.post("/hatch/:id/advance", async (c) => {
   const projectId = c.req.param("id");
+  if (!validateUUID(projectId)) return c.json({ error: "Invalid project ID" }, 400);
   if (!scheduler) return c.json({ error: "Scheduler not initialized" }, 500);
 
   const [project] = await db.select().from(projects).where(eq(projects.id, projectId));
@@ -201,7 +208,7 @@ app.post("/hatch/:id/advance", async (c) => {
   c.header("X-Accel-Buffering", "no");
 
   // 非引擎运行的阶段（waiting_approval / complete）不需要并发锁
-  const needsLock = phaseInfo.phase === "engine_ready" || phaseInfo.phase === "refinement_ready" || phaseInfo.phase === "waiting_revision";
+  const needsLock = phaseInfo.phase === "engine_ready" || phaseInfo.phase === "waiting_revision";
   if (needsLock && advanceLocks.has(projectId)) {
     // 已有引擎在运行 → 返回 waiting 状态，前端会重试
     return stream(c, async (s) => {
@@ -276,17 +283,31 @@ app.post("/hatch/:id/advance", async (c) => {
       return;
     }
 
-    // ── 待细化 → 以细化模式运行引擎 ──
-    if (phaseInfo.phase === "refinement_ready" && phaseInfo.refinement) {
-      await executeEngineSSEStream(s as any, projectId, phaseInfo.refinement!.engineSource, project, {
-        refinement: {
-          parentItemId: phaseInfo.refinement!.parentItemId,
-          parentName: phaseInfo.refinement!.parentName,
-          parentScale: phaseInfo.refinement!.parentScale,
-          targetScale: phaseInfo.refinement!.targetScale,
-          depth: 0,
+    // ── 等待用户操作（有待细化条目，需手动触发）──
+    if (phaseInfo.phase === "waiting_user_action" && phaseInfo.refinement) {
+      safeWrite(`event: phase\ndata: ${JSON.stringify({
+        phase: "waiting_user_action",
+        refinableCount: phaseInfo.refinableCount,
+        nextRefinable: {
+          name: phaseInfo.refinement.parentName,
+          scale: phaseInfo.refinement.parentScale,
+          targetScale: phaseInfo.refinement.targetScale,
         },
-      });
+        message: `有 ${phaseInfo.refinableCount} 个条目待细化，请在地图视图中点击「细化此区域」手动触发`,
+      })}\n\n`);
+      safeWrite(`event: done\ndata: ${JSON.stringify({ success: true })}\n\n`);
+      releaseLock();
+      return;
+    }
+
+    // ── 等待阶段确认（geography 有产出但未确认完成）──
+    if (phaseInfo.phase === "waiting_phase_confirmation") {
+      safeWrite(`event: phase\ndata: ${JSON.stringify({
+        phase: "waiting_phase_confirmation",
+        currentPhase: "geography",
+        message: "地理环境阶段已有产出，请确认阶段完成后推进到后续引擎",
+      })}\n\n`);
+      safeWrite(`event: done\ndata: ${JSON.stringify({ success: true })}\n\n`);
       releaseLock();
       return;
     }
@@ -304,6 +325,7 @@ app.post("/hatch/:id/advance", async (c) => {
  */
 app.get("/hatch/:id/proposals", async (c) => {
   const projectId = c.req.param("id");
+  if (!validateUUID(projectId)) return c.json({ error: "Invalid project ID" }, 400);
   const list = await db
     .select()
     .from(aiProposals)
@@ -319,6 +341,7 @@ app.get("/hatch/:id/proposals", async (c) => {
  */
 app.get("/hatch/:id/engines", async (c) => {
   const projectId = c.req.param("id");
+  if (!validateUUID(projectId)) return c.json({ error: "Invalid project ID" }, 400);
   const engineStates = await queryEngineStates(projectId);
   return c.json(engineStates);
 });
@@ -553,6 +576,7 @@ app.post("/memory/query/:projectId", async (c) => {
  */
 app.get("/settings/:id", async (c) => {
   const projectId = c.req.param("id");
+  if (!validateUUID(projectId)) return c.json({ error: "Invalid project ID" }, 400);
 
   const [settings] = await db
     .select()
@@ -614,6 +638,7 @@ app.get("/settings/:id", async (c) => {
  */
 app.patch("/settings/items/:id", async (c) => {
   const itemId = c.req.param("id");
+  if (!validateUUID(itemId)) return c.json({ error: "Invalid item ID" }, 400);
   let body: any = {};
   try { body = await c.req.json(); } catch { /* ignore */ }
 
@@ -661,9 +686,12 @@ app.post("/proposals/bulk/approve", async (c) => {
   const ids: string[] = body?.ids || [];
   const decision = body?.decision || "作者批量确认";
 
+  // 过滤无效的 proposalId，防止 DB 错误
+  const validIds = ids.filter((id) => validateUUID(id));
+
   let executed = 0;
   let projectId: string | null = null;
-  for (const proposalId of ids) {
+  for (const proposalId of validIds) {
     try {
       const result = await orchestrator.approveProposal(proposalId, decision);
       if (result.executed) {
@@ -780,6 +808,7 @@ app.post("/proposals/:id/revise", async (c) => {
  */
 app.get("/notifications/:projectId", async (c) => {
   const projectId = c.req.param("projectId");
+  if (!validateUUID(projectId)) return c.json({ error: "Invalid project ID" }, 400);
   const { unreadOnly, priority, limit = "50" } = c.req.query();
 
   let conditions = [eq(notifications.projectId, projectId)];
@@ -817,6 +846,7 @@ app.get("/notifications/:projectId", async (c) => {
  */
 app.post("/notifications/:id/:action", async (c) => {
   const notificationId = c.req.param("id");
+  if (!validateUUID(notificationId)) return c.json({ error: "Invalid notification ID" }, 400);
   const action = c.req.param("action");
 
   if (!["read", "dismissed", "acted"].includes(action)) {
@@ -850,6 +880,7 @@ app.post("/notifications/:id/:action", async (c) => {
  */
 app.post("/settings/items/:id/propose-update", async (c) => {
   const itemId = c.req.param("id");
+  if (!validateUUID(itemId)) return c.json({ error: "Invalid item ID" }, 400);
   let body: any = {};
   try { body = await c.req.json(); } catch { return c.json({ error: "Invalid body" }, 400); }
 
@@ -1019,6 +1050,7 @@ app.post("/hatch/:id/engine/:engine/create-item", async (c) => {
   const projectId = c.req.param("id");
   const engineName = c.req.param("engine");
   if (!validateUUID(projectId)) return c.json({ error: "Invalid project ID" }, 400);
+  if (!ALLOWED_CREATE_ENGINES.has(engineName)) return c.json({ error: "Invalid or unsupported engine" }, 400);
 
   let body: any = {};
   try { body = await c.req.json(); } catch { return c.json({ error: "Invalid body" }, 400); }
@@ -1203,6 +1235,8 @@ app.post("/chapters/:id/snapshot", async (c) => {
       createdAt: item.createdAt instanceof Date ? item.createdAt.toISOString() : String(item.createdAt || ""),
     })),
     relations: relations.map((r) => ({
+      sourceItemId: r.sourceItemId,
+      targetItemId: r.targetItemId,
       sourceName: nameMap.get(r.sourceItemId) || "?",
       targetName: nameMap.get(r.targetItemId) || "?",
       relationType: r.relationType,
@@ -1285,6 +1319,69 @@ app.post("/chapters/:id/commit", async (c) => {
     status: "committed",
     message: "章节已确认完成，已触发 proactive 引擎",
   });
+});
+
+/**
+ * POST /hatch/:id/complete-phase/:phase
+ * 用户手动确认某个孵化阶段完成，推进到下一阶段
+ */
+app.post("/hatch/:id/complete-phase/:phase", async (c) => {
+  const projectId = c.req.param("id");
+  const phase = c.req.param("phase");
+  if (!validateUUID(projectId)) return c.json({ error: "Invalid project ID" }, 400);
+  if (!phase || !ALLOWED_PHASES.has(phase)) return c.json({ error: "Invalid or unsupported phase" }, 400);
+
+  const [settings] = await db
+    .select({ hatchSummary: projectSettings.hatchSummary })
+    .from(projectSettings)
+    .where(eq(projectSettings.projectId, projectId));
+
+  const hatchSummary = (settings?.hatchSummary || {}) as Record<string, unknown>;
+  const phaseStatus = (hatchSummary.phaseStatus || {}) as Record<string, string>;
+  phaseStatus[phase] = "completed";
+
+  await db
+    .update(projectSettings)
+    .set({
+      hatchSummary: { ...hatchSummary, phaseStatus },
+      updatedAt: new Date(),
+    })
+    .where(eq(projectSettings.projectId, projectId));
+
+  console.log(`[hatch] Project ${projectId} phase "${phase}" marked as completed`);
+
+  return c.json({
+    success: true,
+    projectId,
+    phase,
+    phaseStatus,
+    message: `阶段 "${phase}" 已标记为完成`,
+  });
+});
+
+/**
+ * POST /settings/items/:id/complete-refinement
+ * 手动标记某条设定细化已完成，不再自动展开
+ */
+app.post("/settings/items/:id/complete-refinement", async (c) => {
+  const itemId = c.req.param("id");
+  if (!validateUUID(itemId)) return c.json({ error: "Invalid item ID" }, 400);
+
+  const [item] = await db
+    .select({ id: settingItems.id, content: settingItems.content })
+    .from(settingItems)
+    .where(eq(settingItems.id, itemId));
+
+  if (!item) return c.json({ error: "Item not found" }, 404);
+
+  const content = { ...(item.content as Record<string, unknown> || {}), needs_refinement: false };
+
+  await db
+    .update(settingItems)
+    .set({ content, updatedAt: new Date() })
+    .where(eq(settingItems.id, itemId));
+
+  return c.json({ success: true, itemId, message: "已标记为细化完成" });
 });
 
 export default app;

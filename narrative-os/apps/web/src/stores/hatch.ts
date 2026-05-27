@@ -147,7 +147,7 @@ export interface EngineInfo {
   hasPending: boolean
 }
 
-type HatchPhase = 'idle' | 'streaming' | 'waiting' | 'world_complete' | 'complete'
+type HatchPhase = 'idle' | 'streaming' | 'waiting' | 'world_complete' | 'complete' | 'waiting_phase_confirmation' | 'waiting_user_action'
 
 interface HatchStore {
   phase: HatchPhase
@@ -171,6 +171,8 @@ interface HatchStore {
   _lastTokenUpdate: number
   // 关系网络缓存（从 settings API 获取，供地图视图使用）
   _relations: SettingItemRelation[]
+  // 当前等待用户确认的阶段名称（如 'geography'）
+  phaseConfirmationTarget: string | null
 
   fetchProposals: (projectId: string) => Promise<void>
   fetchSettings: (projectId: string) => Promise<void>
@@ -179,6 +181,7 @@ interface HatchStore {
   startHatching: (projectId: string) => Promise<void>
   startStudioPhase: (projectId: string) => Promise<void>
   runEngine: (projectId: string, engine: string) => Promise<void>
+  completePhase: (projectId: string, phase: string) => Promise<void>
   approveProposal: (proposalId: string, projectId: string) => Promise<void>
   rejectProposal: (proposalId: string) => Promise<void>
   reviseProposal: (proposalId: string, notes: string) => Promise<void>
@@ -202,6 +205,7 @@ interface HatchStore {
 export const useHatchStore = create<HatchStore>((set, get) => ({
   phase: 'idle',
   hatchGroup: 'world',
+  phaseConfirmationTarget: null,
   proposals: [],
   settingItems: [],
   engines: [],
@@ -339,6 +343,7 @@ export const useHatchStore = create<HatchStore>((set, get) => ({
     fetchUrl: string,
     fetchBody?: Record<string, unknown>,
   ) => {
+    let specialPhase: string | null = null
     try {
       const res = await fetch(fetchUrl, {
         method: 'POST',
@@ -390,7 +395,14 @@ export const useHatchStore = create<HatchStore>((set, get) => ({
           get().fetchEngines(projectId).catch(() => {})
         },
         onEvent: (eventType, data) => {
-          if (eventType === 'phase' && (data.phase as string)?.startsWith('waiting_')) {
+          if (eventType === 'phase' && data.phase === 'waiting_phase_confirmation') {
+            specialPhase = 'waiting_phase_confirmation'
+            const targetPhase = (data.currentPhase as string) || null
+            set({ phase: 'waiting_phase_confirmation', phaseConfirmationTarget: targetPhase })
+          } else if (eventType === 'phase' && data.phase === 'waiting_user_action') {
+            specialPhase = 'waiting_user_action'
+            // 保持 waiting，用户需在地图视图中手动触发细化
+          } else if (eventType === 'phase' && (data.phase as string)?.startsWith('waiting_')) {
             // 等待审批状态 — 不做特殊处理，onDone 后的 fetchProposals 会处理
           } else if (eventType === 'phase' && data.phase === 'studio_engine') {
             // 切换到工作室引擎 — 由 outline store 接管
@@ -460,6 +472,12 @@ export const useHatchStore = create<HatchStore>((set, get) => ({
       // 如果控制器已被替换（新引擎已启动），不覆盖其状态
       if (get()._abortController !== controller) return
 
+      // 特殊阶段：waiting_phase_confirmation — 保持状态，等待用户确认
+      if (specialPhase === 'waiting_phase_confirmation') {
+        set({ phase: 'waiting_phase_confirmation', streamText: '', currentEngine: null, _abortController: null })
+        return
+      }
+
       const pendingNow = get().proposals.filter((p) => p.status === 'pending')
       // 无 pending → 重试一次（DB 写入可能有延迟）
       if (pendingNow.length === 0 && get().proposals.length === 0) {
@@ -481,6 +499,8 @@ export const useHatchStore = create<HatchStore>((set, get) => ({
     } catch (err) {
       if ((err as Error).name === 'AbortError') return
       get().updateLLMJob(jobId, { active: false })
+      // 如果用户已经 abort（_abortController 已被清除），不要覆盖 phase
+      if (get()._abortController !== controller) return
       set({
         phase: 'waiting',
         lastStreamText: get().streamText || get().lastStreamText,
@@ -548,6 +568,16 @@ export const useHatchStore = create<HatchStore>((set, get) => ({
         phase = get().phase === 'streaming' ? 'streaming' : 'waiting'
       } else {
         phase = 'idle'
+      }
+
+      // 保留 waiting_phase_confirmation 状态（除非有新的 pending 提案需要审批）
+      if (get().phase === 'waiting_phase_confirmation' && pending.length === 0) {
+        phase = 'waiting_phase_confirmation'
+      }
+
+      // 保留 waiting_user_action 状态
+      if (get().phase === 'waiting_user_action' && pending.length === 0) {
+        phase = 'waiting_user_action'
       }
 
       // 页面刷新后自动恢复 hatchGroup
@@ -733,6 +763,16 @@ export const useHatchStore = create<HatchStore>((set, get) => ({
     await get().advanceHatching(projectId)
   },
 
+  completePhase: async (projectId, phase) => {
+    try {
+      await apiPost(`/hatch/${projectId}/complete-phase/${phase}`, {})
+      // 阶段确认后自动推进
+      await get().advanceHatching(projectId)
+    } catch (err: any) {
+      set({ error: `阶段确认失败：${err.message}` })
+    }
+  },
+
   approveProposal: async (proposalId, projectId) => {
     let res: { success: boolean; proposalId: string; settingItemsCreated: number; refinementPending?: any; nextEngine?: { name: string; phase: string; hatchGroup?: string } | null };
     try {
@@ -798,12 +838,15 @@ export const useHatchStore = create<HatchStore>((set, get) => ({
         get().fetchEngines(projectId),
       ])
       const remainingPending = get().proposals.filter((p) => p.status === 'pending')
-      if (remainingPending.length > 0) {
+      // 如果引擎正在运行，不要覆盖 streaming 阶段
+      if (get().phase === 'streaming') {
+        // 保持 streaming，不覆盖
+      } else if (remainingPending.length > 0) {
         set({ phase: 'waiting', autoPopupProposalId: remainingPending[0].id })
       } else {
         set({ phase: 'waiting' })
       }
-    } else {
+    } else if (get().phase !== 'streaming') {
       set({ phase: 'waiting' })
     }
   },
@@ -849,6 +892,6 @@ export const useHatchStore = create<HatchStore>((set, get) => ({
 
   reset: () => {
     get()._abortController?.abort()
-    set({ phase: 'idle', hatchGroup: 'world', proposals: [], settingItems: [], engines: [], streamText: '', lastStreamText: '', error: null, llmStatus: null, activeLLMJobs: {}, locked: false, currentEngine: null, _abortController: null, autoPopupProposalId: null, proposalListOpen: false, _lastTokenUpdate: 0, _relations: [] })
+    set({ phase: 'idle', hatchGroup: 'world', phaseConfirmationTarget: null, proposals: [], settingItems: [], engines: [], streamText: '', lastStreamText: '', error: null, llmStatus: null, activeLLMJobs: {}, locked: false, currentEngine: null, _abortController: null, autoPopupProposalId: null, proposalListOpen: false, _lastTokenUpdate: 0, _relations: [] })
   },
 }))

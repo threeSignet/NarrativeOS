@@ -8,6 +8,9 @@ importers:
 
   .:
     devDependencies:
+      tsx:
+        specifier: ^4.22.3
+        version: 4.22.3
       typescript:
         specifier: ^5.4.0
         version: 5.9.3
@@ -133,6 +136,21 @@ importers:
       vite:
         specifier: ^8.0.12
         version: 8.0.13(@types/node@24.12.4)(esbuild@0.28.0)(jiti@2.7.0)(tsx@4.22.3)
+
+  packages/agents:
+    dependencies:
+      '@narrative-os/database':
+        specifier: workspace:*
+        version: link:../database
+      '@narrative-os/engines':
+        specifier: workspace:*
+        version: link:../engines
+      '@narrative-os/pipeline':
+        specifier: workspace:*
+        version: link:../pipeline
+      drizzle-orm:
+        specifier: ^0.30.0
+        version: 0.30.10(@types/pg@8.20.0)(@types/react@19.2.15)(pg@8.21.0)(react@19.2.6)
 
   packages/companion:
     dependencies:

@@ -2,7 +2,7 @@ import { LLMClient, type Message, type ToolDefinitionForLLM, type ToolCall } fro
 import { toolRegistry } from "./registry";
 import type { CompanionEvent, ToolContext } from "./types";
 import { buildCompanionSystemPrompt } from "./prompts";
-import { db, projects } from "@narrative-os/database";
+import { db, projects, EmbeddingPipeline } from "@narrative-os/database";
 import { eq } from "drizzle-orm";
 
 const MAX_ITERATIONS = 10;
@@ -37,10 +37,51 @@ export class CompanionAgent {
 
     const systemPrompt = await this.buildSystemPrompt(ctx);
 
+    // ── RAG：语义召回相关记忆/设定/章节 ──
+    let ragContext = "";
+    const lastUserMessage = messages.filter((m) => m.role === "user").pop();
+    if (lastUserMessage) {
+      try {
+        const pipeline = EmbeddingPipeline.getInstance();
+        if (pipeline) {
+          const results = await pipeline.searchForCompanion(ctx.projectId, lastUserMessage.content, 6);
+          if (results.length > 0) {
+            const sections = new Map<string, string[]>();
+            for (const r of results) {
+              const list = sections.get(r.sourceType) || [];
+              list.push(`- [${r.sourceType}] ${r.chunkText.substring(0, 150)}${r.chunkText.length > 150 ? "..." : ""} (相似度: ${(r.similarity * 100).toFixed(1)}%)`);
+              sections.set(r.sourceType, list);
+            }
+            ragContext = "## 相关项目数据（语义检索）\n";
+            for (const [type, items] of sections) {
+              ragContext += `\n### ${type}\n${items.join("\n")}\n`;
+            }
+          }
+        }
+      } catch (err: any) {
+        console.error(`[CompanionAgent] RAG failed:`, err.message);
+      }
+    }
+
     const allMessages: Message[] = [
       { role: "system", content: systemPrompt },
+      ...(ragContext ? [{ role: "system" as const, content: ragContext }] : []),
       ...messages,
     ];
+
+    // Token 预算管理：如果消息过长，截断中间历史
+    const MAX_TOTAL_CHARS = 80000; // 约 20K tokens 的粗略估计
+    let totalChars = allMessages.reduce((sum, m) => sum + (m.content?.length || 0), 0);
+    if (totalChars > MAX_TOTAL_CHARS) {
+      // 保留 system + 最近用户消息，截断中间历史
+      const systemMessages = allMessages.filter((m) => m.role === "system");
+      const nonSystem = allMessages.filter((m) => m.role !== "system");
+      // 保留最近 10 条非系统消息
+      const trimmed = nonSystem.slice(-10);
+      allMessages.length = 0;
+      allMessages.push(...systemMessages, ...trimmed);
+      console.log(`[CompanionAgent] Messages trimmed: ${totalChars} → ${allMessages.reduce((s, m) => s + (m.content?.length || 0), 0)} chars`);
+    }
 
     let iteration = 0;
     let totalToolCalls = 0;

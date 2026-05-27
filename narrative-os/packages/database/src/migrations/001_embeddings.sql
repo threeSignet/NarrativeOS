@@ -34,8 +34,8 @@ CREATE TABLE IF NOT EXISTS embeddings (
     chunk_text      TEXT NOT NULL,              -- 原始文本（冗余存储避免 JOIN）
     chunk_length    INTEGER NOT NULL DEFAULT 0, -- 文本字符数
 
-    -- 向量嵌入（OpenAI text-embedding-3-small: 1536维）
-    embedding       vector(1536),
+    -- 向量嵌入（BAAI/bge-m3 via SiliconFlow: 1024维）
+    embedding       vector(1024),
 
     -- 过滤元数据
     meta_jsonb      JSONB NOT NULL DEFAULT '{}'::jsonb,
@@ -107,7 +107,7 @@ $$ LANGUAGE plpgsql;
 -- 9. 向量相似度检索函数
 CREATE OR REPLACE FUNCTION search_similar_embeddings(
     query_project_id UUID,
-    query_embedding vector(1536),
+    query_embedding vector(1024),
     query_source_type embedding_source_type DEFAULT NULL,
     similarity_threshold REAL DEFAULT 0.65,
     result_limit INTEGER DEFAULT 10
@@ -140,8 +140,8 @@ END;
 $$ LANGUAGE plpgsql STABLE;
 
 -- 10. 注释
-COMMENT ON TABLE embeddings IS '向量嵌入表：按 project_id 分区的 1536 维向量存储，用于语义相似度检索。';
-COMMENT ON COLUMN embeddings.embedding IS 'OpenAI text-embedding-3-small 模型生成的 1536 维向量。';
+COMMENT ON TABLE embeddings IS '向量嵌入表：按 project_id 分区的 1024 维向量存储，用于语义相似度检索。';
+COMMENT ON COLUMN embeddings.embedding IS 'BAAI/bge-m3 模型生成的 1024 维向量。';
 COMMENT ON COLUMN embeddings.source_type IS '嵌入来源类型，用于检索时的上下文类型过滤。';
 COMMENT ON COLUMN embeddings.chunk_text IS '原始文本块内容（冗余存储以减少 JOIN，提升检索速度）。';
 COMMENT ON COLUMN embeddings.meta_jsonb IS '可扩展的过滤元数据：如章节号、角色ID、段落位置等。';

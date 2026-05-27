@@ -17,8 +17,8 @@
 import type { EmbeddingSourceType, InsertEmbedding, TextChunk, ChunkParams, VectorSearchParams, VectorSearchResult } from "./embedding-types";
 
 /** 嵌入模型常量 */
-const EMBEDDING_MODEL = "text-embedding-3-small";
-const EMBEDDING_DIMENSIONS = 1536;
+const EMBEDDING_MODEL = process.env.EMBEDDING_MODEL || "BAAI/bge-m3";
+const EMBEDDING_DIMENSIONS = Number(process.env.EMBEDDING_DIMENSIONS) || 1024;
 
 /**
  * 文本分块：将长文本按语义边界拆分为适合嵌入的短块。
@@ -111,7 +111,7 @@ export interface EmbeddingProvider {
   /**
    * 批量生成嵌入向量。
    * @param texts 待嵌入的文本数组
-   * @returns 等长的向量数组（每个向量 1536 维）
+   * @returns 等长的向量数组（每个向量 1024 维）
    */
   embedMany(texts: string[]): Promise<number[][]>;
 }
@@ -137,6 +137,38 @@ export class VectorService {
   /** 嵌入模型信息 */
   getModelInfo() {
     return { model: EMBEDDING_MODEL, dimensions: EMBEDDING_DIMENSIONS };
+  }
+
+  /**
+   * 便捷方法：对文本分块、生成嵌入、并存储（一键完成）。
+   */
+  async embedAndStore(
+    projectId: string,
+    sourceType: import("./embedding-types").EmbeddingSourceType,
+    sourceId: string,
+    text: string,
+    meta?: Record<string, unknown>
+  ): Promise<string[]> {
+    const chunks = chunkText(text);
+    if (chunks.length === 0) return [];
+    const embeddings = await this.generateEmbeddings(chunks.map((c) => c.text));
+    return this.storeEmbeddings(projectId, sourceType, sourceId, chunks, embeddings, meta);
+  }
+
+  /**
+   * 语义搜索便捷方法：将查询文本嵌入后执行相似度检索。
+   */
+  async searchByText(
+    projectId: string,
+    queryText: string,
+    options?: Omit<import("./embedding-types").VectorSearchParams, "projectId" | "queryEmbedding">
+  ): Promise<import("./embedding-types").VectorSearchResult[]> {
+    const [queryEmbedding] = await this.generateEmbeddings([queryText]);
+    return this.similaritySearch({
+      projectId,
+      queryEmbedding,
+      ...options,
+    });
   }
 
   /**

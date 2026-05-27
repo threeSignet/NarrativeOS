@@ -1,6 +1,6 @@
 import { useMemo, useRef, useEffect, useState } from 'react'
 import {
-  Loader2, Sparkles, BookOpen, Wand2, Check,
+  Loader2, Sparkles, BookOpen, Wand2, Check, CheckCircle,
   Globe2, Mountain, Swords, MapPin, Users, Package,
   FileText, Layers, PawPrint, Music, Clock, Flame, Coins, GitBranch, Scale, Eye, Pen, Ruler,
   Info, ChevronDown, ChevronRight,
@@ -87,6 +87,7 @@ function PhaseBadge({ phase, pipeline, allEngines }: { phase: string; pipeline: 
     idle: { label: '待开始', color: 'var(--text-muted)', bg: 'rgba(255,255,255,0.04)' },
     streaming: { label: '生成中', color: 'var(--accent-violet)', bg: 'rgba(196,181,253,0.08)' },
     waiting: { label: '待审批', color: 'var(--accent-warm)', bg: 'rgba(253,230,138,0.08)' },
+    waiting_phase_confirmation: { label: '待确认', color: 'var(--accent-warm)', bg: 'rgba(253,230,138,0.08)' },
     world_complete: { label: '世界完成', color: 'var(--accent-mint)', bg: 'rgba(134,239,172,0.08)' },
     complete: { label: '已完成', color: 'var(--accent-mint)', bg: 'rgba(134,239,172,0.08)' },
   }
@@ -333,7 +334,7 @@ function EngineMapPanel({ engines, hatchGroup }: { engines: EngineInfo[]; hatchG
 
 // ── Main Component ──
 
-export default function HatchingView({ project, phase, proposals, engines, currentEngine, streamText, lastStreamText, hatchError, onStart, hatchGroup, onStartStudio }: {
+export default function HatchingView({ project, phase, proposals, engines, currentEngine, streamText, lastStreamText, hatchError, onStart, hatchGroup, onStartStudio, onCompletePhase, phaseConfirmationTarget }: {
   project: Project
   phase: string
   proposals: Proposal[]
@@ -345,6 +346,8 @@ export default function HatchingView({ project, phase, proposals, engines, curre
   onStart: () => void
   hatchGroup: 'world' | 'studio'
   onStartStudio: () => void
+  onCompletePhase?: (phase: string) => void
+  phaseConfirmationTarget?: string | null
 }) {
   const pipeline = useMemo(
     () => computePipeline(engines, proposals, currentEngine, hatchGroup),
@@ -386,7 +389,7 @@ export default function HatchingView({ project, phase, proposals, engines, curre
             onMouseLeave={(e) => { e.currentTarget.style.background = 'rgba(196,181,253,0.14)' }}
           >
             <Wand2 size={16} />
-            开始世界观设计
+            开始世界引擎孵化
           </button>
         </div>
       )
@@ -500,6 +503,39 @@ export default function HatchingView({ project, phase, proposals, engines, curre
               「{project.title}」的世界观与大纲已全部就绪。项目已进入写作模式。
             </p>
           </div>
+        </div>
+      )
+    }
+
+    // ── WAITING_PHASE_CONFIRMATION ──
+    if (phase === 'waiting_phase_confirmation') {
+      return (
+        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 24, padding: '48px 20px', textAlign: 'center' }}>
+          <div style={{ width: 56, height: 56, borderRadius: 14, background: 'rgba(253,230,138,0.08)', border: '1px solid rgba(253,230,138,0.15)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+            <MapPin size={24} style={{ color: 'var(--accent-warm)' }} />
+          </div>
+          <div>
+            <h2 style={{ fontFamily: 'var(--font-brand)', fontSize: 20, color: 'var(--text-primary)', marginBottom: 6 }}>
+              地理环境阶段完成
+            </h2>
+            <p style={{ fontSize: 13, color: 'var(--text-muted)', lineHeight: 1.6, maxWidth: 420 }}>
+              地理环境阶段已有产出。确认完成后，系统将推进到后续世界观引擎。
+            </p>
+          </div>
+          <button onClick={() => onCompletePhase?.(phaseConfirmationTarget || 'geography')} style={{
+            display: 'inline-flex', alignItems: 'center', gap: 8,
+            padding: '14px 28px', borderRadius: 10,
+            background: 'rgba(253,230,138,0.12)', color: 'var(--accent-warm)',
+            border: '1px solid rgba(253,230,138,0.25)',
+            fontSize: 14, fontWeight: 600, cursor: 'pointer', fontFamily: 'var(--font-ui)',
+            transition: 'all var(--duration) var(--ease)',
+          }}
+            onMouseEnter={(e) => { e.currentTarget.style.background = 'rgba(253,230,138,0.2)' }}
+            onMouseLeave={(e) => { e.currentTarget.style.background = 'rgba(253,230,138,0.12)' }}
+          >
+            <CheckCircle size={16} />
+            确认阶段完成
+          </button>
         </div>
       )
     }

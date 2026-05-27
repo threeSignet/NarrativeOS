@@ -7,7 +7,6 @@
     "setup": "node scripts/setup.mjs",
     "setup:full": "node scripts/setup.mjs --reset",
     "start": "pnpm dev",
-
     "db:up": "docker compose up -d",
     "db:down": "docker compose down",
     "db:logs": "docker compose logs -f",
@@ -21,6 +20,7 @@
     "db:reset": "docker exec narrativeos-postgres psql -U narrativeos -d narrativeos -c \"TRUNCATE TABLE ai_proposals, chapters, discussions, llm_logs, mou_states, notification_reads, notifications, outline_items, outlines, project_daily_stats, project_settings, projects, sessions, setting_item_relations, setting_items, volumes CASCADE;\""
   },
   "devDependencies": {
+    "tsx": "^4.22.3",
     "typescript": "^5.4.0"
   }
 }

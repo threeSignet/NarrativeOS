@@ -823,6 +823,13 @@ export abstract class Engine {
     }
   }
 
+  /**
+   * 可选的提案后处理（如语义去重）。子类可覆盖。
+   */
+  protected async postProcessProposals(proposals: Proposal[], _ctx: EngineContext): Promise<Proposal[]> {
+    return proposals;
+  }
+
   /** Non-streaming wrapper */
   async run(ctx: EngineContext): Promise<EngineResult> {
     const gen = this.streamRun(ctx);
@@ -830,6 +837,8 @@ export abstract class Engine {
     for await (const event of gen) {
       if (event.type === "done") final = event.result;
     }
+    // 后处理：语义去重等
+    final.proposals = await this.postProcessProposals(final.proposals, ctx);
     return final;
   }
 }
