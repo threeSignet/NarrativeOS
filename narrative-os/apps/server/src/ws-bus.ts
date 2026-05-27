@@ -74,7 +74,7 @@ export const wsBus = {
     }
     // 清理发送失败的死连接
     for (const z of zombies) clients.delete(z);
-    if (delivered > 0) {
+    if (delivered > 0 && event.type !== "engine_chunk") {
       console.log(`[wsBus] ${event.type} → ${projectId} (${delivered} clients)`);
     }
   },
