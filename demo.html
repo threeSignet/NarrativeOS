@@ -1,0 +1,2345 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>NarrativeOSPlus — Demo</title>
+<link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,300;0,9..40,400;0,9..40,500;0,9..40,600;1,9..40,400&family=Instrument+Serif:ital@0;1&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<script src="https://unpkg.com/lucide@latest"></script>
+<style>
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+:root{
+  --bg-deep:#0c0c14;
+  --bg-nebula:#12101e;
+  --glass-bg:rgba(255,255,255,0.03);
+  --glass-hover:rgba(255,255,255,0.06);
+  --glass-active:rgba(255,255,255,0.08);
+  --glass-border:rgba(255,255,255,0.06);
+  --glass-border-hover:rgba(255,255,255,0.12);
+  --glass-border-active:rgba(255,255,255,0.20);
+  --glass-radius:12px;
+  --accent-ice:#7dd3fc;
+  --accent-mint:#86efac;
+  --accent-rose:#fca5a5;
+  --accent-warm:#fde68a;
+  --accent-violet:#c4b5fd;
+  --accent-orange:#fdba74;
+  --text-primary:rgba(255,255,255,0.88);
+  --text-secondary:rgba(255,255,255,0.50);
+  --text-muted:rgba(255,255,255,0.22);
+  --duration:250ms;
+  --ease:cubic-bezier(0.4,0,0.2,1);
+}
+html,body{
+  height:100%;overflow:hidden;
+  background:var(--bg-deep);color:var(--text-primary);
+  font-family:'DM Sans',system-ui,-apple-system,sans-serif;
+  -webkit-font-smoothing:antialiased;
+}
+
+/* ── layout ── */
+.app{display:flex;flex-direction:column;height:100vh}
+.topbar{
+  height:52px;flex-shrink:0;display:flex;align-items:center;
+  padding:0 20px;gap:16px;
+  background:rgba(255,255,255,0.02);
+  border-bottom:1px solid var(--glass-border);
+  backdrop-filter:blur(20px);
+  z-index:100;
+}
+.topbar-brand{
+  font-family:'Instrument Serif',serif;font-size:18px;
+  letter-spacing:0.02em;color:var(--text-primary);
+  white-space:nowrap;
+}
+.topbar-divider{width:1px;height:24px;background:var(--glass-border);flex-shrink:0}
+.topbar-project{
+  display:flex;align-items:center;gap:8px;
+  font-size:14px;font-weight:500;color:var(--text-secondary);
+  cursor:pointer;padding:6px 12px;border-radius:8px;
+  transition:all var(--duration) var(--ease);
+}
+.topbar-project:hover{background:var(--glass-hover);color:var(--text-primary)}
+.topbar-spacer{flex:1}
+.topbar-mou{
+  display:flex;align-items:center;gap:6px;
+  font-size:12px;font-weight:500;
+  padding:5px 12px;border-radius:20px;
+  background:rgba(125,211,252,0.08);color:var(--accent-ice);
+  border:1px solid rgba(125,211,252,0.15);
+}
+.topbar-mou .pulse{
+  width:6px;height:6px;border-radius:50%;
+  background:var(--accent-ice);
+  animation:pulse 2s ease-in-out infinite;
+}
+@keyframes pulse{0%,100%{opacity:1}50%{opacity:0.3}}
+.topbar-tokens{
+  font-family:'JetBrains Mono',monospace;font-size:11px;
+  color:var(--text-muted);letter-spacing:0.02em;
+}
+.topbar-model{
+  font-size:12px;color:var(--text-secondary);
+  padding:5px 10px;border-radius:6px;
+  background:var(--glass-bg);border:1px solid var(--glass-border);
+}
+.topbar-avatar{
+  width:30px;height:30px;border-radius:50%;
+  background:linear-gradient(135deg,var(--accent-violet),var(--accent-ice));
+  display:flex;align-items:center;justify-content:center;
+  font-size:12px;font-weight:600;color:var(--bg-deep);
+  cursor:pointer;
+}
+
+/* ── main area ── */
+.main{display:flex;flex:1;overflow:hidden;position:relative}
+
+/* ── icon rail ── */
+.rail{
+  width:52px;flex-shrink:0;display:flex;flex-direction:column;
+  align-items:center;padding:12px 0;gap:4px;
+  background:rgba(255,255,255,0.015);
+  border-right:1px solid var(--glass-border);
+  z-index:90;position:relative;
+}
+.rail-btn{
+  width:36px;height:36px;border-radius:10px;border:none;
+  background:transparent;color:var(--text-muted);
+  display:flex;align-items:center;justify-content:center;
+  cursor:pointer;transition:all var(--duration) var(--ease);
+  position:relative;
+}
+.rail-btn:hover{background:var(--glass-hover);color:var(--text-secondary)}
+.rail-btn.active{
+  background:var(--glass-active);color:var(--accent-ice);
+}
+.rail-btn.active::before{
+  content:'';position:absolute;left:-8px;top:50%;transform:translateY(-50%);
+  width:3px;height:16px;border-radius:0 3px 3px 0;
+  background:var(--accent-ice);
+}
+.rail-spacer{flex:1}
+.rail-btn .badge{
+  position:absolute;top:4px;right:4px;
+  width:8px;height:8px;border-radius:50%;
+  background:var(--accent-warm);
+  border:2px solid var(--bg-deep);
+}
+
+/* ── floating panel (from rail click) ── */
+.float-panel{
+  position:absolute;top:0;left:52px;
+  width:300px;height:100%;
+  background:rgba(12,12,22,0.92);
+  backdrop-filter:blur(40px) saturate(1.3);
+  border-right:1px solid rgba(255,255,255,0.08);
+  z-index:80;display:flex;flex-direction:column;
+  transform:translateX(-100%);opacity:0;
+  transition:transform 300ms cubic-bezier(0.16,1,0.3,1),opacity 200ms var(--ease);
+  pointer-events:none;
+}
+.float-panel.open{
+  transform:translateX(0);opacity:1;pointer-events:auto;
+}
+.float-panel-header{
+  padding:20px;display:flex;align-items:center;justify-content:space-between;
+  border-bottom:1px solid var(--glass-border);
+}
+.float-panel-title{
+  font-family:'Instrument Serif',serif;font-size:20px;
+  color:var(--text-primary);letter-spacing:0.01em;
+}
+.float-panel-close{
+  width:28px;height:28px;border-radius:8px;border:none;
+  background:transparent;color:var(--text-muted);
+  display:flex;align-items:center;justify-content:center;
+  cursor:pointer;transition:all var(--duration) var(--ease);
+}
+.float-panel-close:hover{background:var(--glass-hover);color:var(--text-primary)}
+.float-panel-search{
+  margin:16px 20px 8px;padding:10px 14px;border-radius:10px;
+  border:1px solid var(--glass-border);
+  background:rgba(255,255,255,0.03);
+  color:var(--text-primary);font-size:13px;
+  font-family:'DM Sans',sans-serif;
+  outline:none;transition:border-color var(--duration) var(--ease);
+}
+.float-panel-search::placeholder{color:var(--text-muted)}
+.float-panel-search:focus{border-color:rgba(120,160,255,0.4)}
+.float-panel-body{flex:1;overflow-y:auto;padding:8px 20px 20px}
+
+/* category list items */
+.cat-item{
+  display:flex;align-items:center;gap:12px;
+  padding:10px 12px;border-radius:10px;cursor:pointer;
+  transition:all var(--duration) var(--ease);
+  margin-bottom:2px;
+}
+.cat-item:hover{background:var(--glass-hover)}
+.cat-item-icon{
+  width:32px;height:32px;border-radius:8px;
+  display:flex;align-items:center;justify-content:center;
+  flex-shrink:0;
+}
+.cat-item-label{flex:1;font-size:14px;color:var(--text-primary)}
+.cat-item-count{
+  font-family:'JetBrains Mono',monospace;font-size:12px;
+  color:var(--text-muted);min-width:24px;text-align:right;
+}
+.cat-item-arrow{color:var(--text-muted);transition:transform var(--duration) var(--ease)}
+.cat-item:hover .cat-item-arrow{transform:translateX(2px);color:var(--text-secondary)}
+
+/* chapter items */
+.ch-divider{height:1px;background:var(--glass-border);margin:10px 12px}
+.ch-item{
+  display:flex;align-items:center;justify-content:space-between;
+  padding:8px 12px;border-radius:8px;cursor:pointer;
+  transition:all var(--duration) var(--ease);font-size:13px;
+  color:var(--text-secondary);gap:6px;
+}
+.ch-item:hover{background:var(--glass-hover);color:var(--text-primary)}
+.ch-item.active{background:var(--glass-active);color:var(--accent-ice)}
+.ch-item-left{display:flex;align-items:center;gap:8px;min-width:0;flex:1}
+.ch-item-right{display:flex;align-items:center;gap:8px;flex-shrink:0}
+.ch-item-name{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.ch-item-words{font-family:'JetBrains Mono',monospace;font-size:11px;color:var(--text-muted);min-width:32px;text-align:right}
+.ch-item-special{padding:10px 12px}
+.ch-item-outline .ch-item-name{font-weight:500;color:var(--text-primary)}
+.ch-item-unwritten{opacity:0.5}
+.ch-item-unwritten:hover{opacity:0.75}
+
+/* chapter dots — colors match status tags */
+.ch-dot{width:7px;height:7px;border-radius:50%;flex-shrink:0}
+.ch-dot-done{background:var(--accent-mint);box-shadow:0 0 4px rgba(134,239,172,0.3)}
+.ch-dot-draft{background:var(--accent-warm);box-shadow:0 0 4px rgba(253,230,138,0.3)}
+.ch-dot-active{background:var(--accent-ice);box-shadow:0 0 6px rgba(125,211,252,0.4)}
+.ch-dot-outline{background:var(--accent-violet);box-shadow:0 0 4px rgba(196,181,253,0.3)}
+.ch-dot-empty{background:transparent;border:1.5px solid var(--text-muted)}
+
+/* status tags */
+.status-tag{font-size:10px;font-weight:500;padding:2px 7px;border-radius:4px;white-space:nowrap}
+
+/* volume group */
+.ch-volume{margin-bottom:4px}
+.ch-volume-head{
+  display:flex;align-items:center;gap:6px;
+  padding:10px 12px 6px;cursor:pointer;
+  transition:color var(--duration) var(--ease);
+}
+.ch-volume-head:hover{color:var(--text-primary)}
+.ch-volume-name{font-size:12px;font-weight:600;color:var(--text-secondary);flex:1}
+.ch-volume-words{font-family:'JetBrains Mono',monospace;font-size:10px;color:var(--text-muted)}
+.ch-volume-body{padding:0 0 4px}
+
+/* ── editor ── */
+.editor-area{
+  flex:1;display:flex;flex-direction:column;overflow:hidden;
+  position:relative;
+  background:linear-gradient(180deg,var(--bg-deep) 0%,#0e0e18 100%);
+}
+/* editor breadcrumb */
+.editor-breadcrumb{
+  display:flex;align-items:center;gap:6px;
+  padding:10px 24px;border-bottom:1px solid var(--glass-border);
+  background:rgba(255,255,255,0.01);font-size:13px;
+}
+.breadcrumb-item{color:var(--text-muted);cursor:pointer;transition:color var(--duration) var(--ease)}
+.breadcrumb-item:hover{color:var(--text-secondary)}
+.breadcrumb-current{color:var(--text-primary);font-weight:500}
+.breadcrumb-status-label{font-size:11px;color:var(--accent-ice);margin-left:2px}
+.editor-content{
+  flex:1;overflow-y:auto;padding:40px 64px;
+  max-width:780px;width:100%;margin:0 auto;
+  line-height:1.9;font-size:16px;color:rgba(255,255,255,0.82);
+}
+.editor-content p{margin-bottom:1.2em;text-indent:2em}
+
+/* entity highlights */
+.e-char{background:rgba(125,211,252,0.12);border-bottom:1px solid rgba(125,211,252,0.35);padding:0 2px;border-radius:2px;cursor:pointer;transition:background var(--duration) var(--ease)}
+.e-char:hover{background:rgba(125,211,252,0.25)}
+.e-loc{background:rgba(134,239,172,0.12);border-bottom:1px solid rgba(134,239,172,0.35);padding:0 2px;border-radius:2px;cursor:pointer;transition:background var(--duration) var(--ease)}
+.e-loc:hover{background:rgba(134,239,172,0.25)}
+.e-item{background:rgba(196,181,253,0.12);border-bottom:1px solid rgba(196,181,253,0.35);padding:0 2px;border-radius:2px;cursor:pointer;transition:background var(--duration) var(--ease)}
+.e-item:hover{background:rgba(196,181,253,0.25)}
+.e-faction{background:rgba(253,186,116,0.12);border-bottom:1px solid rgba(253,186,116,0.35);padding:0 2px;border-radius:2px;cursor:pointer;transition:background var(--duration) var(--ease)}
+.e-faction:hover{background:rgba(253,186,116,0.25)}
+.e-tech{background:rgba(252,165,165,0.12);border-bottom:1px solid rgba(252,165,165,0.35);padding:0 2px;border-radius:2px;cursor:pointer;transition:background var(--duration) var(--ease)}
+.e-tech:hover{background:rgba(252,165,165,0.25)}
+.e-foreshadow{background:rgba(253,230,138,0.12);border-bottom:1px dashed rgba(253,230,138,0.4);padding:0 2px;border-radius:2px;cursor:pointer;transition:background var(--duration) var(--ease)}
+.e-foreshadow:hover{background:rgba(253,230,138,0.25)}
+
+/* entity tooltip */
+.entity-tip{
+  position:fixed;z-index:200;
+  min-width:220px;max-width:320px;
+  padding:16px;
+  background:rgba(16,16,28,0.95);
+  backdrop-filter:blur(30px);
+  border:1px solid rgba(255,255,255,0.1);
+  border-radius:12px;
+  box-shadow:0 12px 40px rgba(0,0,0,0.5);
+  pointer-events:none;opacity:0;
+  transform:translateY(4px);
+  transition:opacity 150ms var(--ease),transform 150ms var(--ease);
+}
+.entity-tip.show{opacity:1;transform:translateY(0);pointer-events:auto}
+.entity-tip-type{font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:0.06em;margin-bottom:6px}
+.entity-tip-name{font-family:'Instrument Serif',serif;font-size:18px;margin-bottom:8px;color:var(--text-primary)}
+.entity-tip-desc{font-size:13px;color:var(--text-secondary);line-height:1.6}
+
+/* selection toolbar */
+.sel-toolbar{
+  position:fixed;z-index:150;
+  display:flex;flex-direction:column;gap:0;padding:0;
+  background:rgba(16,16,28,0.95);
+  backdrop-filter:blur(20px);
+  border:1px solid rgba(255,255,255,0.12);
+  border-radius:12px;
+  box-shadow:0 8px 32px rgba(0,0,0,0.5);
+  opacity:0;transform:translateY(8px);
+  transition:opacity 150ms var(--ease),transform 150ms var(--ease);
+  pointer-events:none;width:320px;
+}
+.sel-toolbar.show{opacity:1;transform:translateY(0);pointer-events:auto}
+.sel-toolbar-actions{
+  display:flex;gap:2px;padding:6px;
+  flex-wrap:wrap;
+}
+.sel-toolbar button{
+  display:flex;align-items:center;gap:5px;
+  padding:6px 12px;border-radius:7px;border:none;
+  background:transparent;color:var(--text-secondary);
+  font-size:12px;font-family:'DM Sans',sans-serif;font-weight:500;
+  cursor:pointer;transition:all var(--duration) var(--ease);
+  white-space:nowrap;
+}
+.sel-toolbar button:hover{background:var(--glass-hover);color:var(--text-primary)}
+.sel-toolbar-input-row{
+  display:flex;align-items:center;gap:6px;
+  padding:6px 8px;
+  border-top:1px solid rgba(255,255,255,0.06);
+}
+.sel-toolbar-input{
+  flex:1;border:none;background:none;outline:none;
+  color:var(--text-primary);font-size:13px;
+  font-family:'DM Sans',sans-serif;
+  padding:4px 6px;
+}
+.sel-toolbar-input::placeholder{color:var(--text-muted)}
+.sel-toolbar-send{
+  width:28px;height:28px;border-radius:7px;border:none;
+  background:var(--accent-violet);color:var(--bg-deep);
+  display:flex;align-items:center;justify-content:center;
+  cursor:pointer;flex-shrink:0;
+  transition:all var(--duration) var(--ease);
+}
+.sel-toolbar-send:hover{opacity:0.85;transform:scale(1.05)}
+
+/* ── editor views ── */
+.view-settings,.view-outline,.view-vol-outline,.view-ch-outline{
+  padding:32px 48px;max-width:780px;width:100%;margin:0 auto;
+}
+.view-title{font-family:'Instrument Serif',serif;font-size:26px;color:var(--text-primary);margin-bottom:6px}
+.view-subtitle{font-size:14px;color:var(--text-muted);margin-bottom:28px}
+
+/* settings grid */
+.settings-grid{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+.settings-card{
+  padding:18px;border-radius:12px;cursor:pointer;
+  background:rgba(255,255,255,0.025);
+  border:1px solid rgba(255,255,255,0.06);
+  transition:all var(--duration) var(--ease);
+}
+.settings-card:hover{background:rgba(255,255,255,0.05);border-color:rgba(255,255,255,0.12);transform:translateY(-1px)}
+.settings-card-head{display:flex;align-items:center;gap:10px;margin-bottom:10px}
+.settings-card-icon{
+  width:36px;height:36px;border-radius:10px;
+  display:flex;align-items:center;justify-content:center;
+}
+.settings-card-name{font-size:15px;font-weight:500;color:var(--text-primary)}
+.settings-card-count{font-size:11px;color:var(--text-muted);margin-left:auto;font-family:'JetBrains Mono',monospace}
+.settings-card-desc{font-size:13px;color:var(--text-secondary);line-height:1.5}
+.settings-card-tags{display:flex;gap:6px;margin-top:10px;flex-wrap:wrap}
+.settings-tag{
+  font-size:11px;padding:2px 8px;border-radius:5px;
+  background:rgba(255,255,255,0.04);color:var(--text-muted);
+  border:1px solid rgba(255,255,255,0.04);
+}
+
+/* outline modal */
+.outline-section{margin-bottom:24px}
+.outline-vol-card{
+  padding:18px 20px;border-radius:12px;margin-bottom:10px;
+  background:rgba(255,255,255,0.025);border:1px solid rgba(255,255,255,0.06);
+  cursor:pointer;transition:all var(--duration) var(--ease);
+}
+.outline-vol-card:hover{background:rgba(255,255,255,0.05);border-color:rgba(255,255,255,0.1)}
+.outline-vol-head{display:flex;align-items:center;gap:10px;margin-bottom:8px}
+.outline-vol-name{font-family:'Instrument Serif',serif;font-size:18px;color:var(--text-primary)}
+.outline-vol-progress{
+  margin-left:auto;display:flex;align-items:center;gap:8px;
+  font-family:'JetBrains Mono',monospace;font-size:12px;color:var(--text-muted);
+}
+.outline-vol-bar{width:80px;height:4px;border-radius:2px;background:rgba(255,255,255,0.06);overflow:hidden}
+.outline-vol-bar-fill{height:100%;border-radius:2px}
+.outline-vol-summary{font-size:13px;color:var(--text-secondary);line-height:1.6;margin-bottom:8px}
+.outline-vol-chapters{display:flex;gap:4px;flex-wrap:wrap}
+.outline-vol-ch{
+  font-size:11px;padding:2px 8px;border-radius:4px;
+  border:1px solid rgba(255,255,255,0.06);color:var(--text-muted);
+}
+.outline-vol-ch.done{background:rgba(134,239,172,0.08);color:var(--accent-mint);border-color:rgba(134,239,172,0.15)}
+.outline-vol-ch.draft{background:rgba(253,230,138,0.08);color:var(--accent-warm);border-color:rgba(253,230,138,0.15)}
+.outline-vol-ch.active{background:rgba(125,211,252,0.08);color:var(--accent-ice);border-color:rgba(125,211,252,0.15)}
+
+/* volume outline (卷纲) */
+.vol-phase{margin-bottom:20px}
+.vol-phase-head{display:flex;align-items:center;gap:10px;margin-bottom:12px;padding-bottom:8px;border-bottom:1px solid rgba(255,255,255,0.04)}
+.vol-phase-name{font-size:15px;font-weight:600;color:var(--text-primary)}
+.vol-phase-range{font-size:12px;color:var(--text-muted);font-family:'JetBrains Mono',monospace}
+.vol-ch-row{
+  display:flex;align-items:flex-start;gap:12px;
+  padding:10px 14px;border-radius:8px;margin-bottom:4px;
+  transition:background var(--duration) var(--ease);cursor:pointer;
+}
+.vol-ch-row:hover{background:rgba(255,255,255,0.03)}
+.vol-ch-num{
+  font-family:'JetBrains Mono',monospace;font-size:12px;
+  color:var(--text-muted);min-width:32px;padding-top:2px;
+}
+.vol-ch-content{flex:1}
+.vol-ch-title{font-size:14px;color:var(--text-primary);margin-bottom:3px}
+.vol-ch-desc{font-size:13px;color:var(--text-secondary);line-height:1.5}
+
+/* chapter outline (章纲) */
+.ch-outline-section{margin-bottom:24px}
+.ch-outline-label{
+  font-size:11px;font-weight:600;color:var(--text-muted);
+  text-transform:uppercase;letter-spacing:0.06em;margin-bottom:10px;
+  display:flex;align-items:center;gap:6px;
+}
+.ch-outline-grid{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.ch-outline-card{
+  padding:12px 14px;border-radius:10px;
+  background:rgba(255,255,255,0.025);border:1px solid rgba(255,255,255,0.06);
+  display:flex;align-items:center;gap:10px;
+}
+.ch-outline-card-avatar{
+  width:32px;height:32px;border-radius:8px;
+  display:flex;align-items:center;justify-content:center;
+  font-size:12px;font-weight:600;flex-shrink:0;
+}
+.ch-outline-card-info{flex:1;min-width:0}
+.ch-outline-card-name{font-size:13px;font-weight:500;color:var(--text-primary)}
+.ch-outline-card-detail{font-size:11px;color:var(--text-muted);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.ch-outline-event{
+  padding:10px 14px;border-radius:8px;margin-bottom:6px;
+  background:rgba(255,255,255,0.02);border:1px solid rgba(255,255,255,0.04);
+  display:flex;align-items:flex-start;gap:10px;
+}
+.ch-outline-event-dot{width:6px;height:6px;border-radius:50%;margin-top:5px;flex-shrink:0}
+.ch-outline-event-text{font-size:13px;color:var(--text-secondary);line-height:1.5}
+.ch-outline-event-meta{font-size:11px;color:var(--text-muted);margin-top:2px}
+.ch-outline-foreshadow{
+  padding:10px 14px;border-radius:8px;margin-bottom:6px;
+  background:rgba(253,230,138,0.04);border:1px solid rgba(253,230,138,0.1);
+  display:flex;align-items:center;gap:10px;
+}
+.ch-outline-fs-state{
+  font-size:10px;font-weight:600;padding:2px 7px;border-radius:4px;
+}
+.ch-outline-fs-text{font-size:13px;color:var(--text-secondary);flex:1}
+.ch-outline-fs-chapter{font-size:11px;color:var(--text-muted);flex-shrink:0}
+.ch-outline-summary{
+  padding:16px 18px;border-radius:10px;
+  background:rgba(255,255,255,0.02);border:1px solid rgba(255,255,255,0.06);
+  font-size:14px;line-height:1.8;color:var(--text-secondary);
+}
+.editor-content.hidden,.editor-breadcrumb.hidden{display:none}
+
+/* writing state — outline panel floats over editor */
+.writing-outline-float{
+  position:absolute;left:12px;top:56px;bottom:12px;width:210px;
+  background:rgba(12,12,20,0.85);
+  backdrop-filter:blur(20px);
+  border:1px solid rgba(255,255,255,0.06);
+  border-radius:12px;
+  padding:14px 12px;overflow-y:auto;z-index:10;
+}
+.writing-outline-title{
+  font-size:11px;font-weight:600;color:var(--text-muted);
+  text-transform:uppercase;letter-spacing:0.06em;
+  margin-bottom:12px;display:flex;align-items:center;gap:5px;
+}
+.writing-outline-section{margin-bottom:14px}
+.writing-outline-label{font-size:10px;color:var(--text-muted);margin-bottom:5px;font-weight:600}
+.writing-outline-item{
+  padding:4px 8px;border-radius:5px;font-size:12px;
+  color:var(--text-secondary);line-height:1.4;margin-bottom:2px;
+}
+.writing-outline-item-active{
+  background:rgba(253,230,138,0.06);color:var(--accent-warm);
+  border-left:2px solid var(--accent-warm);
+}
+.writing-outline-item-done{color:var(--text-muted);opacity:0.5}
+.writing-outline-item-done::after{content:' ✓';font-size:10px;color:var(--accent-mint)}
+.writing-outline-tag{
+  display:inline-block;font-size:9px;padding:1px 5px;border-radius:3px;
+  background:rgba(255,255,255,0.04);color:var(--text-muted);margin-right:3px;
+}
+.writing-outline-entity{
+  display:flex;align-items:center;gap:6px;
+  padding:3px 8px;margin-bottom:2px;font-size:12px;color:var(--text-secondary);
+}
+.writing-outline-entity-dot{width:5px;height:5px;border-radius:50%;flex-shrink:0}
+.writing-outline-rule{
+  padding:5px 8px;border-radius:5px;margin-bottom:3px;
+  font-size:11px;color:var(--text-muted);line-height:1.3;
+  border:1px solid rgba(255,255,255,0.03);
+}
+
+.streaming-cursor{
+  display:inline-block;width:2px;height:1em;
+  background:var(--accent-ice);margin-left:2px;
+  animation:blink 1s step-end infinite;vertical-align:text-bottom;
+}
+@keyframes blink{0%,100%{opacity:1}50%{opacity:0}}
+.streaming-line{
+  color:rgba(255,255,255,0.65);
+  border-left:2px solid var(--accent-violet);
+  padding-left:12px;margin-left:2em;
+}
+
+.streaming-cursor{
+  display:inline-block;width:2px;height:1em;
+  background:var(--accent-ice);margin-left:2px;
+  animation:blink 1s step-end infinite;vertical-align:text-bottom;
+}
+@keyframes blink{0%,100%{opacity:1}50%{opacity:0}}
+.streaming-line{
+  color:rgba(255,255,255,0.65);
+  border-left:2px solid var(--accent-violet);
+  padding-left:12px;margin-left:2em;
+}
+
+/* empty chapter state */
+.empty-state{
+  display:flex;flex-direction:column;align-items:center;justify-content:center;
+  padding:80px 40px;text-align:center;
+}
+.empty-state-icon{
+  width:64px;height:64px;border-radius:16px;
+  background:rgba(255,255,255,0.03);border:1px solid rgba(255,255,255,0.06);
+  display:flex;align-items:center;justify-content:center;
+  margin-bottom:20px;color:var(--text-muted);
+}
+.empty-state-title{font-family:'Instrument Serif',serif;font-size:22px;color:var(--text-primary);margin-bottom:8px}
+.empty-state-desc{font-size:14px;color:var(--text-muted);line-height:1.6;margin-bottom:28px;max-width:400px}
+.empty-state-actions{display:flex;gap:10px;flex-wrap:wrap;justify-content:center}
+.empty-btn{
+  padding:12px 24px;border-radius:10px;border:none;
+  font-size:14px;font-weight:500;cursor:pointer;
+  font-family:'DM Sans',sans-serif;
+  display:flex;align-items:center;gap:8px;
+  transition:all var(--duration) var(--ease);
+}
+.empty-btn-primary{background:rgba(196,181,253,0.12);color:var(--accent-violet);border:1px solid rgba(196,181,253,0.2)}
+.empty-btn-primary:hover{background:rgba(196,181,253,0.2)}
+.empty-btn-secondary{background:rgba(255,255,255,0.04);color:var(--text-secondary);border:1px solid var(--glass-border)}
+.empty-btn-secondary:hover{background:var(--glass-hover);color:var(--text-primary)}
+
+/* companion outline context panel */
+.companion-outline{
+  padding:12px 16px;border-bottom:1px solid var(--glass-border);
+  max-height:calc(100vh - 280px);overflow-y:auto;
+}
+.companion-outline-title{
+  font-size:11px;font-weight:600;color:var(--text-muted);
+  text-transform:uppercase;letter-spacing:0.06em;
+  margin-bottom:10px;display:flex;align-items:center;gap:6px;
+}
+.companion-outline-section{margin-bottom:12px}
+.companion-outline-label{font-size:11px;color:var(--text-muted);margin-bottom:4px;font-weight:500}
+.companion-outline-item{font-size:12px;color:var(--text-secondary);padding:2px 0;line-height:1.5}
+.companion-outline-item::before{content:'·';margin-right:4px;color:var(--text-muted)}
+.companion-outline-current{color:var(--accent-warm);font-weight:500}
+.companion-outline-tag{
+  display:inline-block;font-size:10px;padding:1px 5px;border-radius:3px;
+  background:rgba(255,255,255,0.04);color:var(--text-muted);margin-right:3px;
+}
+
+/* ── companion ── */
+.companion{
+  width:360px;flex-shrink:0;display:flex;flex-direction:column;
+  background:rgba(255,255,255,0.015);
+  border-left:1px solid var(--glass-border);
+  z-index:70;
+}
+.companion-header{
+  padding:16px 20px;border-bottom:1px solid var(--glass-border);
+}
+.companion-title{
+  font-family:'Instrument Serif',serif;font-size:16px;
+  margin-bottom:8px;display:flex;align-items:center;gap:8px;
+}
+.companion-title i{color:var(--accent-violet)}
+.companion-context{
+  display:flex;align-items:center;gap:6px;flex-wrap:wrap;
+}
+.companion-ctx-tag{
+  font-size:11px;padding:3px 10px;border-radius:6px;
+  background:rgba(255,255,255,0.04);
+  border:1px solid var(--glass-border);
+  color:var(--text-secondary);
+}
+.companion-messages{
+  flex:1;overflow-y:auto;padding:16px 20px;
+  display:flex;flex-direction:column;gap:16px;
+}
+.msg{display:flex;gap:10px}
+.msg-avatar{
+  width:28px;height:28px;border-radius:8px;flex-shrink:0;
+  display:flex;align-items:center;justify-content:center;font-size:12px;
+}
+.msg-avatar.user{
+  background:linear-gradient(135deg,var(--accent-violet),var(--accent-ice));
+  color:var(--bg-deep);font-weight:600;
+}
+.msg-avatar.ai{
+  background:rgba(196,181,253,0.15);
+  color:var(--accent-violet);
+  border:1px solid rgba(196,181,253,0.2);
+}
+.msg-body{flex:1}
+.msg-name{font-size:11px;font-weight:600;color:var(--text-muted);margin-bottom:4px}
+.msg-text{font-size:14px;line-height:1.7;color:var(--text-secondary)}
+.msg-text p{margin-bottom:8px}
+
+.companion-input-area{
+  padding:12px 16px;border-top:1px solid var(--glass-border);
+}
+.companion-input-row{
+  display:flex;align-items:flex-end;gap:8px;
+  padding:10px 14px;border-radius:12px;
+  border:1px solid var(--glass-border);
+  background:rgba(255,255,255,0.03);
+  transition:border-color var(--duration) var(--ease);
+}
+.companion-input-row:focus-within{border-color:rgba(120,160,255,0.35)}
+.companion-input{
+  flex:1;border:none;background:none;outline:none;
+  color:var(--text-primary);font-size:14px;
+  font-family:'DM Sans',sans-serif;
+  resize:none;min-height:20px;max-height:100px;
+}
+.companion-input::placeholder{color:var(--text-muted)}
+.companion-send{
+  width:32px;height:32px;border-radius:8px;border:none;
+  background:var(--accent-violet);color:var(--bg-deep);
+  display:flex;align-items:center;justify-content:center;
+  cursor:pointer;flex-shrink:0;
+  transition:all var(--duration) var(--ease);
+}
+.companion-send:hover{opacity:0.85;transform:scale(1.05)}
+
+/* ── editor action rail ── */
+.editor-actions{
+  position:absolute;top:52px;right:12px;z-index:60;
+  display:flex;flex-direction:column;gap:4px;
+  padding:8px 0;
+}
+.editor-action-btn{
+  width:38px;height:38px;border-radius:50%;border:none;
+  background:rgba(255,255,255,0.04);
+  color:var(--text-muted);
+  display:flex;align-items:center;justify-content:center;
+  cursor:pointer;position:relative;
+  transition:all var(--duration) var(--ease);
+  backdrop-filter:blur(12px);
+}
+.editor-action-btn:hover{
+  background:rgba(255,255,255,0.08);
+  color:var(--text-primary);
+  transform:scale(1.08);
+}
+.editor-action-btn::after{
+  content:attr(data-tip);
+  position:absolute;right:calc(100% + 10px);top:50%;
+  transform:translateY(-50%);
+  padding:5px 10px;border-radius:6px;
+  background:rgba(16,16,28,0.95);
+  border:1px solid rgba(255,255,255,0.1);
+  color:var(--text-secondary);font-size:12px;
+  font-family:'DM Sans',sans-serif;
+  white-space:nowrap;pointer-events:none;
+  opacity:0;transition:opacity 150ms var(--ease);
+}
+.editor-action-btn:hover::after{opacity:1}
+.editor-action-btn.active-action{
+  background:rgba(196,181,253,0.12);
+  color:var(--accent-violet);
+  border:1px solid rgba(196,181,253,0.2);
+}
+
+/* ── status bar ── */
+.statusbar{
+  height:32px;flex-shrink:0;display:flex;align-items:center;
+  padding:0 16px;gap:16px;
+  background:rgba(255,255,255,0.015);
+  border-top:1px solid var(--glass-border);
+  font-family:'JetBrains Mono',monospace;font-size:11px;
+  color:var(--text-muted);
+}
+.status-item{display:flex;align-items:center;gap:5px}
+.status-dot{width:6px;height:6px;border-radius:50%}
+.status-dot.idle{background:var(--text-muted)}
+.status-dot.processing{background:var(--accent-violet);animation:pulse 1.5s ease-in-out infinite}
+.statusbar-spacer{flex:1}
+.status-action{
+  cursor:pointer;border-radius:6px;padding:4px 8px;
+  transition:all var(--duration) var(--ease);
+}
+.status-action:hover{background:var(--glass-hover)}
+.status-flow{gap:6px}
+.status-flow-label{font-size:10px;color:var(--text-muted);text-transform:uppercase;letter-spacing:0.06em}
+.status-flow-state{font-size:11px;color:var(--text-secondary);font-weight:500}
+
+/* rail flow state */
+.rail-flow-btn{position:relative}
+.rail-flow-ring{
+  width:28px;height:28px;border-radius:50%;
+  border:2px solid rgba(255,255,255,0.08);
+  display:flex;align-items:center;justify-content:center;
+  transition:border-color var(--duration) var(--ease);
+}
+.rail-flow-btn:hover .rail-flow-ring{border-color:rgba(255,255,255,0.15)}
+.rail-flow-dot{
+  width:8px;height:8px;border-radius:50%;
+  transition:background var(--duration) var(--ease),box-shadow var(--duration) var(--ease);
+}
+.rail-flow-dot.idle{background:var(--text-muted)}
+.rail-flow-dot.processing{background:var(--accent-violet);box-shadow:0 0 8px rgba(196,181,253,0.5);animation:pulse 1.5s ease-in-out infinite}
+.rail-flow-dot.review{background:var(--accent-warm);box-shadow:0 0 8px rgba(253,230,138,0.5);animation:pulse 1s ease-in-out infinite}
+
+/* ── MOU modal ── */
+.mou-overlay{
+  position:fixed;inset:0;z-index:500;
+  background:rgba(0,0,0,0.6);
+  backdrop-filter:blur(8px);
+  display:flex;align-items:center;justify-content:center;
+  opacity:0;pointer-events:none;
+  transition:opacity 250ms var(--ease);
+}
+.mou-overlay.show{opacity:1;pointer-events:auto}
+.mou-modal{
+  width:min(680px,92vw);max-height:88vh;
+  background:rgba(16,16,30,0.96);
+  backdrop-filter:blur(40px) saturate(1.3);
+  border:1px solid rgba(255,255,255,0.1);
+  border-radius:16px;
+  box-shadow:0 24px 80px rgba(0,0,0,0.6),inset 0 1px 0 rgba(255,255,255,0.06);
+  display:flex;flex-direction:column;
+  transform:scale(0.96);transition:transform 250ms cubic-bezier(0.16,1,0.3,1);
+  overflow:hidden;
+}
+.mou-overlay.show .mou-modal{transform:scale(1)}
+.mou-head{
+  padding:20px 24px 16px;
+  border-bottom:1px solid var(--glass-border);
+}
+.mou-head-top{display:flex;align-items:center;justify-content:space-between;margin-bottom:6px}
+.mou-head-left{display:flex;align-items:center;gap:10px}
+.mou-badge{
+  font-size:11px;font-weight:600;padding:3px 10px;
+  border-radius:6px;text-transform:uppercase;letter-spacing:0.04em;
+}
+.mou-badge.content{background:rgba(125,211,252,0.1);color:var(--accent-ice);border:1px solid rgba(125,211,252,0.2)}
+.mou-badge.risk{background:rgba(252,165,165,0.1);color:var(--accent-rose);border:1px solid rgba(252,165,165,0.2)}
+.mou-head-title{font-family:'Instrument Serif',serif;font-size:20px}
+.mou-head-meta{font-size:12px;color:var(--text-muted)}
+.mou-body{flex:1;overflow-y:auto;padding:20px 24px}
+.mou-section{margin-bottom:20px}
+.mou-section-label{
+  font-size:11px;font-weight:600;color:var(--text-muted);
+  text-transform:uppercase;letter-spacing:0.06em;margin-bottom:10px;
+  display:flex;align-items:center;gap:6px;
+}
+.mou-reason{
+  padding:14px 16px;border-radius:10px;
+  background:rgba(255,255,255,0.03);
+  border:1px solid var(--glass-border);
+  font-size:14px;line-height:1.7;color:var(--text-secondary);
+}
+.mou-content-box{
+  padding:16px 20px;border-radius:10px;
+  background:rgba(255,255,255,0.02);
+  border:1px solid var(--glass-border);
+  font-size:15px;line-height:1.9;color:rgba(255,255,255,0.8);
+  text-indent:2em;
+}
+.mou-meta-grid{
+  display:grid;grid-template-columns:1fr 1fr;gap:10px;
+}
+.mou-meta-item{
+  padding:10px 14px;border-radius:8px;
+  background:rgba(255,255,255,0.02);
+  border:1px solid var(--glass-border);
+  display:flex;align-items:center;gap:8px;
+  font-size:13px;color:var(--text-secondary);
+}
+.mou-meta-item span.label{color:var(--text-muted);font-size:11px}
+.mou-input-section{margin-bottom:0}
+.mou-textarea{
+  width:100%;min-height:80px;padding:14px 16px;
+  border-radius:10px;border:1px solid var(--glass-border);
+  background:rgba(255,255,255,0.03);
+  color:var(--text-primary);font-size:14px;
+  font-family:'DM Sans',sans-serif;
+  line-height:1.6;resize:vertical;outline:none;
+  transition:border-color var(--duration) var(--ease);
+}
+.mou-textarea::placeholder{color:var(--text-muted)}
+.mou-textarea:focus{border-color:rgba(120,160,255,0.4)}
+.mou-foot{
+  padding:16px 24px 20px;
+  border-top:1px solid var(--glass-border);
+  display:flex;gap:10px;justify-content:flex-end;
+}
+.mou-btn{
+  padding:10px 24px;border-radius:10px;border:none;
+  font-size:14px;font-weight:600;cursor:pointer;
+  font-family:'DM Sans',sans-serif;
+  display:flex;align-items:center;gap:8px;
+  transition:all var(--duration) var(--ease);
+}
+.mou-btn.approve{background:rgba(134,239,172,0.12);color:var(--accent-mint);border:1px solid rgba(134,239,172,0.2)}
+.mou-btn.approve:hover{background:rgba(134,239,172,0.2)}
+.mou-btn.reject{background:rgba(252,165,165,0.12);color:var(--accent-rose);border:1px solid rgba(252,165,165,0.2)}
+.mou-btn.reject:hover{background:rgba(252,165,165,0.2)}
+.mou-btn.discuss{background:rgba(253,230,138,0.12);color:var(--accent-warm);border:1px solid rgba(253,230,138,0.2)}
+.mou-btn.discuss:hover{background:rgba(253,230,138,0.2)}
+
+/* ── MOU scene context ── */
+.mou-scene-grid{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+.mou-scene-card{
+  padding:14px 16px;border-radius:10px;
+  background:rgba(255,255,255,0.02);
+  border:1px solid var(--glass-border);
+}
+.mou-scene-card-head{
+  display:flex;align-items:center;gap:7px;margin-bottom:10px;
+}
+.mou-scene-card-title{font-size:12px;font-weight:600;color:var(--text-secondary)}
+.mou-scene-card-body{font-size:13px;color:var(--text-secondary);line-height:1.6}
+
+/* location chain */
+.mou-scene-loc-chain{display:flex;align-items:center;gap:4px;flex-wrap:wrap;margin-bottom:8px}
+.mou-loc-tag{
+  padding:3px 10px;border-radius:6px;font-size:12px;
+  background:rgba(255,255,255,0.04);border:1px solid var(--glass-border);
+  color:var(--text-secondary);
+}
+.mou-scene-note{font-size:12px;color:var(--text-muted);line-height:1.5}
+
+/* timeline rows */
+.mou-timeline-row{
+  display:flex;align-items:baseline;gap:8px;
+  padding:4px 0;border-bottom:1px solid rgba(255,255,255,0.03);
+}
+.mou-timeline-label{font-size:11px;color:var(--text-muted);min-width:64px;flex-shrink:0}
+.mou-timeline-value{font-size:13px;color:var(--text-secondary)}
+
+/* character list */
+.mou-char-list{display:flex;flex-direction:column;gap:8px}
+.mou-char-chip{
+  display:flex;align-items:center;gap:10px;
+  padding:10px 12px;border-radius:8px;
+  background:rgba(255,255,255,0.02);
+  border:1px solid rgba(255,255,255,0.04);
+}
+.mou-char-avatar{
+  width:34px;height:34px;border-radius:8px;
+  display:flex;align-items:center;justify-content:center;
+  font-size:13px;font-weight:600;flex-shrink:0;
+}
+.mou-char-info{flex:1;min-width:0}
+.mou-char-name{font-size:13px;font-weight:500;color:var(--text-primary);display:flex;align-items:center;gap:6px}
+.mou-char-role{
+  font-size:10px;font-weight:500;padding:1px 6px;border-radius:4px;
+  background:rgba(255,255,255,0.05);color:var(--text-muted);
+}
+.mou-char-state{font-size:11px;color:var(--text-muted);margin-top:2px}
+.mou-char-present{
+  font-size:11px;font-weight:500;padding:3px 8px;border-radius:5px;
+  background:rgba(134,239,172,0.08);color:var(--accent-mint);
+  flex-shrink:0;white-space:nowrap;
+}
+
+/* memory list */
+.mou-memory-list{display:flex;flex-direction:column;gap:6px}
+.mou-memory-item{
+  display:flex;align-items:center;gap:10px;
+  padding:8px 12px;border-radius:8px;
+  background:rgba(255,255,255,0.015);
+}
+.mou-memory-dot{width:6px;height:6px;border-radius:50%;flex-shrink:0}
+.mou-memory-text{flex:1;font-size:13px;color:var(--text-secondary)}
+.mou-memory-chapter{font-size:11px;color:var(--text-muted);flex-shrink:0}
+
+/* ── entity popup card ── */
+.entity-popup{
+  position:absolute;z-index:200;
+  width:280px;padding:16px;
+  background:rgba(16,16,28,0.95);
+  backdrop-filter:blur(30px);
+  border:1px solid rgba(255,255,255,0.1);
+  border-radius:12px;
+  box-shadow:0 12px 40px rgba(0,0,0,0.5);
+  opacity:0;transform:translateY(4px);
+  transition:opacity 150ms var(--ease),transform 150ms var(--ease);
+  pointer-events:none;
+}
+.entity-popup.show{opacity:1;transform:translateY(0);pointer-events:auto}
+
+/* ── scrollbar ── */
+::-webkit-scrollbar{width:5px}
+::-webkit-scrollbar-track{background:transparent}
+::-webkit-scrollbar-thumb{background:rgba(255,255,255,0.08);border-radius:3px}
+::-webkit-scrollbar-thumb:hover{background:rgba(255,255,255,0.15)}
+
+/* ── demo trigger buttons (bottom right) ── */
+.demo-triggers{
+  position:fixed;bottom:48px;right:380px;z-index:300;
+  display:flex;flex-direction:column;gap:8px;align-items:flex-end;
+}
+.demo-btn{
+  padding:8px 16px;border-radius:10px;border:1px solid rgba(255,255,255,0.1);
+  background:rgba(255,255,255,0.05);
+  backdrop-filter:blur(12px);
+  color:var(--text-secondary);font-size:12px;
+  font-family:'DM Sans',sans-serif;cursor:pointer;
+  transition:all var(--duration) var(--ease);
+  white-space:nowrap;
+}
+.demo-btn:hover{background:var(--glass-hover);color:var(--text-primary);border-color:var(--glass-border-hover)}
+.demo-label{font-size:10px;color:var(--text-muted);text-align:right;padding-right:4px}
+</style>
+</head>
+<body>
+
+<div class="app">
+  <!-- ── topbar ── -->
+  <div class="topbar">
+    <div class="topbar-brand">NarrativeOS</div>
+    <div class="topbar-divider"></div>
+    <div class="topbar-project">
+      <i data-lucide="folder" style="width:14px;height:14px"></i>
+      万古神帝
+      <i data-lucide="chevron-down" style="width:12px;height:12px"></i>
+    </div>
+    <div class="topbar-spacer"></div>
+    <div class="topbar-mou" style="display:none">
+      <div class="pulse"></div>
+      IDLE
+    </div>
+    <div class="topbar-avatar">陈</div>
+  </div>
+
+  <!-- ── main ── -->
+  <div class="main">
+    <!-- icon rail -->
+    <div class="rail" id="rail">
+      <button class="rail-btn" data-panel="world" title="世界设定集">
+        <i data-lucide="globe-2" style="width:18px;height:18px"></i>
+      </button>
+      <button class="rail-btn" data-panel="chapters" title="正文">
+        <i data-lucide="book-open" style="width:18px;height:18px"></i>
+        <span class="badge"></span>
+      </button>
+      <div class="rail-spacer"></div>
+      <button class="rail-btn rail-flow-btn" id="railFlow" title="心流状态">
+        <div class="rail-flow-ring">
+          <div class="rail-flow-dot idle"></div>
+        </div>
+      </button>
+      <button class="rail-btn" data-panel="settings" title="设置">
+        <i data-lucide="settings" style="width:18px;height:18px"></i>
+      </button>
+    </div>
+
+    <!-- float panel: world -->
+    <div class="float-panel" id="panel-world">
+      <div class="float-panel-header">
+        <div class="float-panel-title">世界设定集</div>
+        <button class="float-panel-close" onclick="closePanel()">
+          <i data-lucide="x" style="width:16px;height:16px"></i>
+        </button>
+      </div>
+      <input class="float-panel-search" placeholder="搜索实体..." />
+      <div class="float-panel-body">
+        <div class="cat-item" onclick="showSubPanel('characters')">
+          <div class="cat-item-icon" style="background:rgba(125,211,252,0.1)">
+            <i data-lucide="user" style="width:16px;height:16px;color:var(--accent-ice)"></i>
+          </div>
+          <div class="cat-item-label">角色</div>
+          <div class="cat-item-count">12</div>
+          <div class="cat-item-arrow"><i data-lucide="chevron-right" style="width:14px;height:14px"></i></div>
+        </div>
+        <div class="cat-item">
+          <div class="cat-item-icon" style="background:rgba(134,239,172,0.1)">
+            <i data-lucide="map-pin" style="width:16px;height:16px;color:var(--accent-mint)"></i>
+          </div>
+          <div class="cat-item-label">地点</div>
+          <div class="cat-item-count">8</div>
+          <div class="cat-item-arrow"><i data-lucide="chevron-right" style="width:14px;height:14px"></i></div>
+        </div>
+        <div class="cat-item">
+          <div class="cat-item-icon" style="background:rgba(253,186,116,0.1)">
+            <i data-lucide="shield" style="width:16px;height:16px;color:var(--accent-orange)"></i>
+          </div>
+          <div class="cat-item-label">势力</div>
+          <div class="cat-item-count">4</div>
+          <div class="cat-item-arrow"><i data-lucide="chevron-right" style="width:14px;height:14px"></i></div>
+        </div>
+        <div class="cat-item">
+          <div class="cat-item-icon" style="background:rgba(252,165,165,0.1)">
+            <i data-lucide="flame" style="width:16px;height:16px;color:var(--accent-rose)"></i>
+          </div>
+          <div class="cat-item-label">功法 / 技能</div>
+          <div class="cat-item-count">15</div>
+          <div class="cat-item-arrow"><i data-lucide="chevron-right" style="width:14px;height:14px"></i></div>
+        </div>
+        <div class="cat-item">
+          <div class="cat-item-icon" style="background:rgba(196,181,253,0.1)">
+            <i data-lucide="gem" style="width:16px;height:16px;color:var(--accent-violet)"></i>
+          </div>
+          <div class="cat-item-label">物品 / 道具</div>
+          <div class="cat-item-count">23</div>
+          <div class="cat-item-arrow"><i data-lucide="chevron-right" style="width:14px;height:14px"></i></div>
+        </div>
+        <div class="cat-item">
+          <div class="cat-item-icon" style="background:rgba(253,230,138,0.1)">
+            <i data-lucide="clock" style="width:16px;height:16px;color:var(--accent-warm)"></i>
+          </div>
+          <div class="cat-item-label">历史事件</div>
+          <div class="cat-item-count">6</div>
+          <div class="cat-item-arrow"><i data-lucide="chevron-right" style="width:14px;height:14px"></i></div>
+        </div>
+        <div class="cat-item">
+          <div class="cat-item-icon" style="background:rgba(255,255,255,0.05)">
+            <i data-lucide="scroll" style="width:16px;height:16px;color:var(--text-secondary)"></i>
+          </div>
+          <div class="cat-item-label">世界规则</div>
+          <div class="cat-item-count">9</div>
+          <div class="cat-item-arrow"><i data-lucide="chevron-right" style="width:14px;height:14px"></i></div>
+        </div>
+        <div class="cat-item">
+          <div class="cat-item-icon" style="background:rgba(253,230,138,0.08)">
+            <i data-lucide="link" style="width:16px;height:16px;color:var(--accent-warm)"></i>
+          </div>
+          <div class="cat-item-label">伏笔管理</div>
+          <div class="cat-item-count">7</div>
+          <div class="cat-item-arrow"><i data-lucide="chevron-right" style="width:14px;height:14px"></i></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- float panel: chapters -->
+    <div class="float-panel" id="panel-chapters">
+      <div class="float-panel-header">
+        <div class="float-panel-title">正文</div>
+        <button class="float-panel-close" onclick="closePanel()">
+          <i data-lucide="x" style="width:16px;height:16px"></i>
+        </button>
+      </div>
+      <input class="float-panel-search" placeholder="搜索章节..." />
+      <div class="float-panel-body">
+
+        <!-- top-level items -->
+        <div class="ch-item ch-item-special" data-type="设定集">
+          <div class="ch-item-left">
+            <i data-lucide="scroll" style="width:14px;height:14px;color:var(--text-muted)"></i>
+            <span class="ch-item-name">设定集</span>
+          </div>
+          <span class="ch-item-status status-tag" style="background:rgba(196,181,253,0.08);color:var(--accent-violet)">总览</span>
+        </div>
+        <div class="ch-item ch-item-special" data-type="大纲总览">
+          <div class="ch-item-left">
+            <i data-lucide="list-tree" style="width:14px;height:14px;color:var(--text-muted)"></i>
+            <span class="ch-item-name">大纲总览</span>
+          </div>
+          <span class="ch-item-status status-tag" style="background:rgba(255,255,255,0.04);color:var(--text-muted)">全局</span>
+        </div>
+
+        <div class="ch-divider"></div>
+
+        <!-- volume 1 -->
+        <div class="ch-volume">
+          <div class="ch-volume-head">
+            <i data-lucide="chevron-down" style="width:12px;height:12px;color:var(--text-muted)"></i>
+            <span class="ch-volume-name">第一卷：破晓</span>
+            <span class="ch-volume-words">18,400 字</span>
+          </div>
+          <div class="ch-volume-body">
+            <div class="ch-item ch-item-outline" data-type="卷纲">
+              <div class="ch-item-left">
+                <i data-lucide="file-text" style="width:13px;height:13px;color:var(--text-muted)"></i>
+                <span class="ch-item-name">卷纲</span>
+              </div>
+              <span class="ch-item-status status-tag" style="background:rgba(134,239,172,0.08);color:var(--accent-mint)">已定稿</span>
+            </div>
+            <div class="ch-item" data-type="chapter">
+              <div class="ch-item-left">
+                <div class="ch-dot ch-dot-done"></div>
+                <span class="ch-item-name">第1章 降临</span>
+              </div>
+              <div class="ch-item-right">
+                <span class="ch-item-status status-tag" style="background:rgba(134,239,172,0.08);color:var(--accent-mint)">定稿</span>
+                <span class="ch-item-words">3,200</span>
+              </div>
+            </div>
+            <div class="ch-item" data-type="chapter">
+              <div class="ch-item-left">
+                <div class="ch-dot ch-dot-done"></div>
+                <span class="ch-item-name">第2章 觉醒</span>
+              </div>
+              <div class="ch-item-right">
+                <span class="ch-item-status status-tag" style="background:rgba(134,239,172,0.08);color:var(--accent-mint)">定稿</span>
+                <span class="ch-item-words">4,800</span>
+              </div>
+            </div>
+            <div class="ch-item" data-type="chapter">
+              <div class="ch-item-left">
+                <div class="ch-dot ch-dot-done"></div>
+                <span class="ch-item-name">第3章 试炼</span>
+              </div>
+              <div class="ch-item-right">
+                <span class="ch-item-status status-tag" style="background:rgba(134,239,172,0.08);color:var(--accent-mint)">定稿</span>
+                <span class="ch-item-words">5,100</span>
+              </div>
+            </div>
+            <div class="ch-item" data-type="chapter">
+              <div class="ch-item-left">
+                <div class="ch-dot ch-dot-draft"></div>
+                <span class="ch-item-name">第4章 逃亡</span>
+              </div>
+              <div class="ch-item-right">
+                <span class="ch-item-status status-tag" style="background:rgba(253,230,138,0.08);color:var(--accent-warm)">草稿</span>
+                <span class="ch-item-words">5,300</span>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- volume 2 -->
+        <div class="ch-volume">
+          <div class="ch-volume-head">
+            <i data-lucide="chevron-down" style="width:12px;height:12px;color:var(--text-muted)"></i>
+            <span class="ch-volume-name">第二卷：深渊</span>
+            <span class="ch-volume-words">12,600 字</span>
+          </div>
+          <div class="ch-volume-body">
+            <div class="ch-item ch-item-outline" data-type="卷纲">
+              <div class="ch-item-left">
+                <i data-lucide="file-text" style="width:13px;height:13px;color:var(--text-muted)"></i>
+                <span class="ch-item-name">卷纲</span>
+              </div>
+              <span class="ch-item-status status-tag" style="background:rgba(134,239,172,0.08);color:var(--accent-mint)">已定稿</span>
+            </div>
+            <div class="ch-item active" data-type="chapter">
+              <div class="ch-item-left">
+                <div class="ch-dot ch-dot-active"></div>
+                <span class="ch-item-name">第5章 深渊之门</span>
+              </div>
+              <div class="ch-item-right">
+                <span class="ch-item-status status-tag" style="background:rgba(125,211,252,0.08);color:var(--accent-ice)">写作中</span>
+                <span class="ch-item-words">1,200</span>
+              </div>
+            </div>
+            <div class="ch-item" data-type="chapter">
+              <div class="ch-item-left">
+                <div class="ch-dot ch-dot-draft"></div>
+                <span class="ch-item-name">第6章 暗流涌动</span>
+              </div>
+              <div class="ch-item-right">
+                <span class="ch-item-status status-tag" style="background:rgba(253,230,138,0.08);color:var(--accent-warm)">草稿</span>
+                <span class="ch-item-words">2,800</span>
+              </div>
+            </div>
+            <div class="ch-item ch-item-unwritten" data-type="chapter" data-has-outline="true">
+              <div class="ch-item-left">
+                <div class="ch-dot ch-dot-outline"></div>
+                <span class="ch-item-name">第7章 觉醒之刻</span>
+              </div>
+              <div class="ch-item-right">
+                <span class="ch-item-status status-tag" style="background:rgba(255,255,255,0.03);color:var(--text-muted)">有章纲</span>
+                <span class="ch-item-words">--</span>
+              </div>
+            </div>
+            <div class="ch-item ch-item-unwritten" data-type="chapter" data-has-outline="false">
+              <div class="ch-item-left">
+                <div class="ch-dot ch-dot-empty"></div>
+                <span class="ch-item-name">第8章</span>
+              </div>
+              <div class="ch-item-right">
+                <span class="ch-item-status status-tag" style="background:rgba(255,255,255,0.03);color:var(--text-muted)">未创建</span>
+                <span class="ch-item-words">--</span>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div style="padding:8px 12px">
+          <button style="width:100%;padding:10px;border-radius:8px;border:1px dashed var(--glass-border);background:transparent;color:var(--text-muted);font-size:13px;cursor:pointer;font-family:'DM Sans',sans-serif;transition:all var(--duration) var(--ease)" onmouseover="this.style.borderColor='var(--glass-border-hover)';this.style.color='var(--text-secondary)'" onmouseout="this.style.borderColor='var(--glass-border)';this.style.color='var(--text-muted)'">
+            + 新建章节
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <!-- float panel: settings -->
+    <div class="float-panel" id="panel-settings">
+      <div class="float-panel-header">
+        <div class="float-panel-title">设置</div>
+        <button class="float-panel-close" onclick="closePanel()">
+          <i data-lucide="x" style="width:16px;height:16px"></i>
+        </button>
+      </div>
+      <div class="float-panel-body">
+        <div class="cat-item">
+          <div class="cat-item-icon" style="background:rgba(255,255,255,0.05)">
+            <i data-lucide="sliders" style="width:16px;height:16px;color:var(--text-secondary)"></i>
+          </div>
+          <div class="cat-item-label">项目设置</div>
+          <div class="cat-item-arrow"><i data-lucide="chevron-right" style="width:14px;height:14px"></i></div>
+        </div>
+        <div class="cat-item">
+          <div class="cat-item-icon" style="background:rgba(255,255,255,0.05)">
+            <i data-lucide="cpu" style="width:16px;height:16px;color:var(--text-secondary)"></i>
+          </div>
+          <div class="cat-item-label">模型配置</div>
+          <div class="cat-item-arrow"><i data-lucide="chevron-right" style="width:14px;height:14px"></i></div>
+        </div>
+        <div class="cat-item">
+          <div class="cat-item-icon" style="background:rgba(255,255,255,0.05)">
+            <i data-lucide="key" style="width:16px;height:16px;color:var(--text-secondary)"></i>
+          </div>
+          <div class="cat-item-label">API 密钥</div>
+          <div class="cat-item-arrow"><i data-lucide="chevron-right" style="width:14px;height:14px"></i></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ── editor ── -->
+    <div class="editor-area" id="editorArea">
+      <div class="editor-breadcrumb">
+        <span class="breadcrumb-item">第二卷：深渊</span>
+        <i data-lucide="chevron-right" style="width:12px;height:12px;color:var(--text-muted)"></i>
+        <span class="breadcrumb-item breadcrumb-current">第5章 深渊之门</span>
+        <span class="breadcrumb-status-dot ch-dot ch-dot-active" style="margin-left:6px"></span>
+        <span class="breadcrumb-status-label">写作中</span>
+      </div>
+      <div class="editor-actions">
+        <button class="editor-action-btn" data-tip="续写"><i data-lucide="pen-line" style="width:16px;height:16px"></i></button>
+        <button class="editor-action-btn" data-tip="润色"><i data-lucide="sparkles" style="width:16px;height:16px"></i></button>
+        <button class="editor-action-btn" data-tip="对话优化"><i data-lucide="message-circle" style="width:16px;height:16px"></i></button>
+        <button class="editor-action-btn" data-tip="逻辑修正"><i data-lucide="wrench" style="width:16px;height:16px"></i></button>
+        <button class="editor-action-btn" data-tip="展开描写"><i data-lucide="unfold-vertical" style="width:16px;height:16px"></i></button>
+        <button class="editor-action-btn" data-tip="去AI味"><i data-lucide="eraser" style="width:16px;height:16px"></i></button>
+        <button class="editor-action-btn" data-tip="查记忆"><i data-lucide="database" style="width:16px;height:16px"></i></button>
+        <button class="editor-action-btn" data-tip="检查一致性"><i data-lucide="shield-check" style="width:16px;height:16px"></i></button>
+      </div>
+      <div class="editor-content" id="editorContent">
+        <p>黑暗如潮水般涌来，<span class="e-char" data-entity="linmo" data-type="角色" data-name="林默" data-desc="古神后裔，28岁，筑基中期。性格内敛但意志坚定。体内沉睡着远古血脉。">林默</span>感觉自己的意识正在被某种不可抗拒的力量吞噬。他试图挣扎，但身体仿佛被无数根无形的丝线缠绕，动弹不得。</p>
+
+        <p>就在他即将放弃的那一刻，一缕微光出现在意识的深处——那不是外部的光源，而是来自他体内沉睡已久的<span class="e-tech" data-entity="gushenxue" data-type="功法" data-name="古神血脉" data-desc="远古时代流传下来的神秘血脉力量，觉醒后可操控暗元素。目前觉醒程度：15%。">古神血脉</span>。那股力量像是被什么触发了，开始在他的经脉中缓缓流动，带来一丝微弱但真实的温暖。</p>
+
+        <p><span class="e-char" data-entity="suyao" data-type="角色" data-name="苏瑶" data-desc="灵医传人，25岁。擅长以灵气疗伤。与林默有着微妙的情感联系。目前位于深渊入口外围。">苏瑶</span>的声音从远处传来，模糊而焦急："林默！你还好吗？快回应我！"</p>
+
+        <p>他想开口，却发现喉咙像是被什么东西堵住了。古神血脉的温度在持续升高，从温暖变成了灼热，从灼热变成了<span class="e-foreshadow" data-entity="fsh01" data-type="伏笔" data-name="力量觉醒的前兆" data-desc="伏笔：第2章埋下的「沉睡的力量」开始觉醒，预计在第7章完全觉醒。状态：进行中。">难以忍受的灼烧</span>。他感觉自己的血管里流淌的不再是血液，而是岩浆。</p>
+
+        <p>周围的空间开始扭曲。这里是<span class="e-loc" data-entity="abyss" data-type="地点" data-name="深渊裂隙" data-desc="位于大陆北部的空间裂缝，通往古神沉睡的异空间。充满不稳定的暗元素。">深渊裂隙</span>的深处，连光线都无法逃逸的地方。但此刻，林默的身体却在发光——微弱的、幽蓝色的光芒从他的皮肤下透出，像是黑暗中唯一的星辰。</p>
+
+        <p>"<span class="e-faction" data-entity="tianxu" data-type="势力" data-name="天虚宗" data-desc="大陆五大宗门之一，以修炼虚空之力著称。宗主：凌霄子。与主角存在潜在冲突。">天虚宗</span>的记载没有错……"一个苍老的声音在虚空中回荡，"古神的后裔，终将在黑暗中觉醒。"</p>
+
+        <p>林默咬紧牙关，意识在痛苦中逐渐清明。他看到了——在那灼烧的深处，有一扇门。一扇<span class="e-item" data-entity="stone" data-type="物品" data-name="深渊之门" data-desc="由古神之力凝聚而成的传送门，连接现实世界与古神沉睡空间。需要古神血脉才能激活。">由纯粹暗元素凝聚而成的石门</span>，门上刻着他从未见过却能读懂的文字。</p>
+      </div>
+    </div>
+
+    <!-- ── companion ── -->
+    <div class="companion">
+      <div class="companion-header">
+        <div class="companion-title">
+          <i data-lucide="sparkles" style="width:16px;height:16px"></i>
+          AI 伙伴
+        </div>
+        <div class="companion-context">
+          <span class="companion-ctx-tag">第5章 · 深渊之门</span>
+          <span class="companion-ctx-tag">正文编辑</span>
+          <span class="companion-ctx-tag" style="background:rgba(125,211,252,0.08);color:var(--accent-ice);border-color:rgba(125,211,252,0.15)">林默</span>
+        </div>
+      </div>
+      <div class="companion-messages">
+        <div class="msg">
+          <div class="msg-avatar ai">
+            <i data-lucide="sparkles" style="width:14px;height:14px"></i>
+          </div>
+          <div class="msg-body">
+            <div class="msg-name">AI</div>
+            <div class="msg-text">
+              <p>当前第5章已写入 7 段，约 1,200 字。</p>
+              <p>根据章纲，接下来需要描写<strong style="color:var(--accent-ice)">林默推开深渊之门</strong>的场景，并触发古神血脉的第一阶段觉醒。</p>
+              <p>需要注意的伏笔：<span style="color:var(--accent-warm)">「沉睡的力量」</span>已铺垫 3 章，本章是最佳回收时机。</p>
+            </div>
+          </div>
+        </div>
+        <div class="msg">
+          <div class="msg-avatar user">陈</div>
+          <div class="msg-body">
+            <div class="msg-name">你</div>
+            <div class="msg-text">帮我把林默推门的那一刻写得更有冲击力，要有一种命运齿轮开始转动的感觉</div>
+          </div>
+        </div>
+        <div class="msg">
+          <div class="msg-avatar ai">
+            <i data-lucide="sparkles" style="width:14px;height:14px"></i>
+          </div>
+          <div class="msg-body">
+            <div class="msg-name">AI</div>
+            <div class="msg-text">
+              <p>收到，我来写这段。重点营造「命运转折」的氛围。</p>
+              <div style="margin-top:10px;padding:12px 16px;border-radius:10px;background:rgba(134,239,172,0.06);border:1px solid rgba(134,239,172,0.12);font-size:13px">
+                <div style="font-size:11px;color:var(--accent-mint);font-weight:600;margin-bottom:6px">已生成提案 #47</div>
+                正文续写 · 推门场景 · 约 800 字
+                <div style="margin-top:8px;display:flex;gap:6px">
+                  <span style="font-size:11px;color:var(--text-muted)">Token: 2,847 → 4,102</span>
+                  <span style="font-size:11px;color:var(--text-muted)">·</span>
+                  <span style="font-size:11px;color:var(--accent-mint)">置信度 78%</span>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div class="companion-input-area">
+        <div class="companion-input-row">
+          <textarea class="companion-input" rows="1" placeholder="输入指令或问题..."></textarea>
+          <button class="companion-send">
+            <i data-lucide="arrow-up" style="width:16px;height:16px"></i>
+          </button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── status bar / bottom bar ── -->
+  <div class="statusbar">
+    <div class="status-item status-flow" id="bottomFlow">
+      <div class="status-dot idle"></div>
+      <span class="status-flow-label">心流</span>
+      <span class="status-flow-state" id="flowStateText">IDLE</span>
+    </div>
+    <div class="topbar-divider" style="height:16px"></div>
+    <div class="status-item">
+      <i data-lucide="coins" style="width:11px;height:11px"></i>
+      <span>1M 上下文</span>
+    </div>
+    <div class="status-item">待命</div>
+    <div class="topbar-divider" style="height:16px"></div>
+    <div class="status-item status-action" onclick="openMOU()">
+      <i data-lucide="bell" style="width:12px;height:12px"></i>
+      <span>提案 <span style="color:var(--accent-warm)">3</span></span>
+    </div>
+    <div class="status-item status-action">
+      <i data-lucide="link" style="width:12px;height:12px"></i>
+      <span>伏笔 <span style="color:var(--accent-warm)">7</span></span>
+    </div>
+    <div class="status-item status-action">
+      <i data-lucide="brain" style="width:12px;height:12px"></i>
+      <span>记忆 42</span>
+    </div>
+    <div class="status-item status-action">
+      <i data-lucide="shield-alert" style="width:12px;height:12px"></i>
+      <span>风险 <span style="color:var(--accent-mint)">0</span></span>
+    </div>
+    <div class="statusbar-spacer"></div>
+    <div class="status-item">
+      <div class="status-dot" style="background:var(--accent-mint)"></div>
+      <span>已连接</span>
+    </div>
+    <div class="status-item">最后保存 14:32</div>
+  </div>
+</div>
+
+<!-- ── MOU modal ── -->
+<div class="mou-overlay" id="mouOverlay">
+  <div class="mou-modal">
+    <div class="mou-head">
+      <div class="mou-head-top">
+        <div class="mou-head-left">
+          <span class="mou-badge content">CONTENT</span>
+          <span class="mou-head-title">正文续写 · 推门场景</span>
+        </div>
+        <span style="font-size:12px;color:var(--text-muted)">提案 #47 · 刚刚</span>
+      </div>
+      <div class="mou-head-meta">来自 Studio Engine · 第5章 · 正文续写</div>
+    </div>
+    <div class="mou-body">
+
+      <!-- ── 场景上下文 ── -->
+      <div class="mou-section">
+        <div class="mou-section-label">
+          <i data-lucide="clapperboard" style="width:12px;height:12px"></i>
+          场景上下文
+        </div>
+        <div class="mou-scene-grid">
+
+          <!-- 地理位置 -->
+          <div class="mou-scene-card">
+            <div class="mou-scene-card-head">
+              <i data-lucide="map-pin" style="width:13px;height:13px;color:var(--accent-mint)"></i>
+              <span class="mou-scene-card-title">地理位置</span>
+            </div>
+            <div class="mou-scene-card-body">
+              <div class="mou-scene-loc-chain">
+                <span class="mou-loc-tag">苍穹大陆</span>
+                <i data-lucide="chevron-right" style="width:10px;height:10px;color:var(--text-muted)"></i>
+                <span class="mou-loc-tag">北荒之地</span>
+                <i data-lucide="chevron-right" style="width:10px;height:10px;color:var(--text-muted)"></i>
+                <span class="mou-loc-tag" style="background:rgba(134,239,172,0.12);color:var(--accent-mint);border-color:rgba(134,239,172,0.2)">深渊裂隙 · 深层</span>
+              </div>
+              <div class="mou-scene-note">空间裂缝内部，暗元素浓度极高，常人无法存活。连接古神沉睡的异空间。</div>
+            </div>
+          </div>
+
+          <!-- 时间线 -->
+          <div class="mou-scene-card">
+            <div class="mou-scene-card-head">
+              <i data-lucide="clock" style="width:13px;height:13px;color:var(--accent-violet)"></i>
+              <span class="mou-scene-card-title">故事时间</span>
+            </div>
+            <div class="mou-scene-card-body">
+              <div class="mou-timeline-row">
+                <span class="mou-timeline-label">纪年</span>
+                <span class="mou-timeline-value">天历 3027 年</span>
+              </div>
+              <div class="mou-timeline-row">
+                <span class="mou-timeline-label">时节</span>
+                <span class="mou-timeline-value">深秋 · 夜半</span>
+              </div>
+              <div class="mou-timeline-row">
+                <span class="mou-timeline-label">距开篇</span>
+                <span class="mou-timeline-value">第 47 天</span>
+              </div>
+              <div class="mou-timeline-row" style="border:none;padding-bottom:0">
+                <span class="mou-timeline-label">距上个事件</span>
+                <span class="mou-timeline-value">~2 时辰（苏瑶进入裂隙外围）</span>
+              </div>
+            </div>
+          </div>
+
+          <!-- 在场角色 -->
+          <div class="mou-scene-card" style="grid-column:1/-1">
+            <div class="mou-scene-card-head">
+              <i data-lucide="users" style="width:13px;height:13px;color:var(--accent-ice)"></i>
+              <span class="mou-scene-card-title">相关角色</span>
+            </div>
+            <div class="mou-scene-card-body" style="padding-top:10px">
+              <div class="mou-char-list">
+                <div class="mou-char-chip">
+                  <div class="mou-char-avatar" style="background:linear-gradient(135deg,rgba(125,211,252,0.3),rgba(125,211,252,0.1));color:var(--accent-ice)">林</div>
+                  <div class="mou-char-info">
+                    <div class="mou-char-name">林默 <span class="mou-char-role">主角 · POV</span></div>
+                    <div class="mou-char-state">筑基中期 · 古神血脉觉醒中 · 意识模糊</div>
+                  </div>
+                  <div class="mou-char-present">在场</div>
+                </div>
+                <div class="mou-char-chip">
+                  <div class="mou-char-avatar" style="background:linear-gradient(135deg,rgba(196,181,253,0.3),rgba(196,181,253,0.1));color:var(--accent-violet)">苏</div>
+                  <div class="mou-char-info">
+                    <div class="mou-char-name">苏瑶 <span class="mou-char-role">灵医传人</span></div>
+                    <div class="mou-char-state">筑基初期 · 位于裂隙外围 · 焦急状态</div>
+                  </div>
+                  <div class="mou-char-present" style="background:rgba(253,230,138,0.08);color:var(--accent-warm)">附近</div>
+                </div>
+                <div class="mou-char-chip">
+                  <div class="mou-char-avatar" style="background:linear-gradient(135deg,rgba(255,255,255,0.1),rgba(255,255,255,0.03));color:var(--text-muted)">?</div>
+                  <div class="mou-char-info">
+                    <div class="mou-char-name">苍老声音 <span class="mou-char-role">未知身份</span></div>
+                    <div class="mou-char-state">出现在虚空中 · 疑似古神残念或上古存在</div>
+                  </div>
+                  <div class="mou-char-present" style="background:rgba(196,181,253,0.08);color:var(--accent-violet)">未知</div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- ── AI 理由 ── -->
+      <div class="mou-section">
+        <div class="mou-section-label">
+          <i data-lucide="brain" style="width:12px;height:12px"></i>
+          AI 理由
+        </div>
+        <div class="mou-reason">根据章纲第3节，当前场景需要一个转折点。前文已铺垫「沉睡的力量」伏笔3章，此处为最佳觉醒时机。推门场景融入命运感元素，回应作者"命运齿轮转动"的要求。</div>
+      </div>
+
+      <!-- ── 提案内容 ── -->
+      <div class="mou-section">
+        <div class="mou-section-label">
+          <i data-lucide="file-text" style="width:12px;height:12px"></i>
+          提案内容
+        </div>
+        <div class="mou-content-box">他伸出手。指尖触碰到石门的一瞬，世界安静了——不是寂静，是万物屏息。那些暗元素编织的文字在他触碰的刹那亮起，幽蓝的光沿着门上的纹路蔓延，像是唤醒了一条沉睡了亿万年的河流。林默的手掌贴在门上，感觉到了脉动。不是他自己的心跳，而是门的。门在跳动。一下、两下、三下，和他胸腔里的节奏渐渐重合，然后——超越了它。命运没有齿轮。命运是一扇门。而他在推开它。门在重，重过山岳。门在轻，轻过叹息。石门无声地裂开一道缝隙，光从那缝隙中涌出——不是照亮黑暗的光，而是将黑暗本身燃尽的光。林默看见了门后的世界。他的眼睛在燃烧。他的血液在歌唱。古神的记忆像潮水般灌入他的意识——</div>
+      </div>
+
+      <!-- ── 关联信息 ── -->
+      <div class="mou-section">
+        <div class="mou-section-label">
+          <i data-lucide="info" style="width:12px;height:12px"></i>
+          关联信息
+        </div>
+        <div class="mou-meta-grid">
+          <div class="mou-meta-item">
+            <i data-lucide="user" style="width:13px;height:13px;color:var(--accent-ice)"></i>
+            <div><div class="label">引用实体</div>林默, 古神血脉, 深渊之门</div>
+          </div>
+          <div class="mou-meta-item">
+            <i data-lucide="link" style="width:13px;height:13px;color:var(--accent-warm)"></i>
+            <div><div class="label">关联伏笔</div>沉睡的力量 (第2章埋 · 预计第7章回收)</div>
+          </div>
+          <div class="mou-meta-item">
+            <i data-lucide="coins" style="width:13px;height:13px;color:var(--accent-violet)"></i>
+            <div><div class="label">Token 消耗</div>2,847 → 4,102</div>
+          </div>
+          <div class="mou-meta-item">
+            <i data-lucide="bar-chart-3" style="width:13px;height:13px;color:var(--accent-mint)"></i>
+            <div><div class="label">置信度</div>
+              <div style="display:flex;align-items:center;gap:6px">
+                <div style="flex:1;height:3px;border-radius:2px;background:rgba(255,255,255,0.06);overflow:hidden">
+                  <div style="width:78%;height:100%;background:var(--accent-mint);border-radius:2px"></div>
+                </div>
+                78%
+              </div>
+            </div>
+          </div>
+          <div class="mou-meta-item">
+            <i data-lucide="shield-alert" style="width:13px;height:13px;color:var(--accent-rose)"></i>
+            <div><div class="label">谏官备注</div>战力描写需注意上限，古神血脉觉醒不可超过筑基后期</div>
+          </div>
+          <div class="mou-meta-item">
+            <i data-lucide="scroll" style="width:13px;height:13px;color:var(--text-secondary)"></i>
+            <div><div class="label">应用规则</div>去AI味规则v2 · 战力体系约束 · 风格：冷峻克制</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- ── 记忆快照 ── -->
+      <div class="mou-section">
+        <div class="mou-section-label">
+          <i data-lucide="database" style="width:12px;height:12px"></i>
+          记忆快照 · 本章已确认事件
+        </div>
+        <div class="mou-memory-list">
+          <div class="mou-memory-item">
+            <div class="mou-memory-dot" style="background:var(--accent-ice)"></div>
+            <div class="mou-memory-text">林默进入深渊裂隙深层</div>
+            <span class="mou-memory-chapter">第5章</span>
+          </div>
+          <div class="mou-memory-item">
+            <div class="mou-memory-dot" style="background:var(--accent-rose)"></div>
+            <div class="mou-memory-text">古神血脉被动触发，觉醒迹象明显</div>
+            <span class="mou-memory-chapter">第5章</span>
+          </div>
+          <div class="mou-memory-item">
+            <div class="mou-memory-dot" style="background:var(--accent-warm)"></div>
+            <div class="mou-memory-text">伏笔「沉睡的力量」开始回收</div>
+            <span class="mou-memory-chapter">第2章埋</span>
+          </div>
+          <div class="mou-memory-item">
+            <div class="mou-memory-dot" style="background:var(--accent-violet)"></div>
+            <div class="mou-memory-text">神秘苍老声音出现，身份未明</div>
+            <span class="mou-memory-chapter">第5章 · 新</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- ── 你的批示 ── -->
+      <div class="mou-section mou-input-section">
+        <div class="mou-section-label">
+          <i data-lucide="pen-line" style="width:12px;height:12px"></i>
+          你的批示
+        </div>
+        <textarea class="mou-textarea" placeholder="在此输入你的意见、修改要求、补充说明...&#10;&#10;例如：批准，但最后一段「古神的记忆」描写再克制一些"></textarea>
+      </div>
+    </div>
+    <div class="mou-foot">
+      <button class="mou-btn reject" onclick="closeMOU()">
+        <i data-lucide="x" style="width:15px;height:15px"></i>
+        驳回
+      </button>
+      <button class="mou-btn discuss" onclick="closeMOU()">
+        <i data-lucide="message-circle" style="width:15px;height:15px"></i>
+        商讨
+      </button>
+      <button class="mou-btn approve" onclick="closeMOU()">
+        <i data-lucide="check" style="width:15px;height:15px"></i>
+        批准
+      </button>
+    </div>
+  </div>
+</div>
+
+<!-- ── demo triggers ── -->
+<div class="demo-triggers">
+  <div class="demo-label">Demo 操作</div>
+  <button class="demo-btn" onclick="openMOU()">弹出 MOU 提案弹窗</button>
+  <button class="demo-btn" onclick="triggerSelection()">模拟选中文字工具条</button>
+</div>
+
+<!-- ── selection toolbar ── -->
+<div class="sel-toolbar" id="selToolbar">
+  <div class="sel-toolbar-actions">
+    <button><i data-lucide="pen-line" style="width:13px;height:13px"></i>续写</button>
+    <button><i data-lucide="sparkles" style="width:13px;height:13px"></i>润色</button>
+    <button><i data-lucide="wrench" style="width:13px;height:13px"></i>修正</button>
+    <button><i data-lucide="unfold-vertical" style="width:13px;height:13px"></i>展开</button>
+    <button><i data-lucide="eraser" style="width:13px;height:13px"></i>去AI味</button>
+  </div>
+  <div class="sel-toolbar-input-row">
+    <input class="sel-toolbar-input" placeholder="描述你想怎么处理这段文字..." />
+    <button class="sel-toolbar-send"><i data-lucide="arrow-up" style="width:14px;height:14px"></i></button>
+  </div>
+</div>
+
+<!-- ── entity tooltip ── -->
+<div class="entity-tip" id="entityTip">
+  <div class="entity-tip-type" id="entityTipType">角色</div>
+  <div class="entity-tip-name" id="entityTipName">林默</div>
+  <div class="entity-tip-desc" id="entityTipDesc">古神后裔，28岁，筑基中期。</div>
+</div>
+
+<script>
+lucide.createIcons();
+
+// ── rail panel toggle ──
+let activePanel = null;
+document.querySelectorAll('.rail-btn').forEach(btn => {
+  btn.addEventListener('click', () => {
+    const panel = btn.dataset.panel;
+    if (activePanel === panel) { closePanel(); return; }
+    closePanel();
+    activePanel = panel;
+    btn.classList.add('active');
+    const el = document.getElementById('panel-' + panel);
+    if (el) el.classList.add('open');
+  });
+});
+function closePanel() {
+  activePanel = null;
+  document.querySelectorAll('.rail-btn').forEach(b => b.classList.remove('active'));
+  document.querySelectorAll('.float-panel').forEach(p => p.classList.remove('open'));
+}
+
+// ── MOU modal ──
+function openMOU() {
+  document.getElementById('mouOverlay').classList.add('show');
+  lucide.createIcons();
+}
+function closeMOU() {
+  document.getElementById('mouOverlay').classList.remove('show');
+}
+
+// ── entity tooltip ──
+const tip = document.getElementById('entityTip');
+document.querySelectorAll('[data-entity]').forEach(el => {
+  el.addEventListener('mouseenter', e => {
+    const rect = el.getBoundingClientRect();
+    document.getElementById('entityTipType').textContent = el.dataset.type;
+    document.getElementById('entityTipType').style.color =
+      el.classList.contains('e-char') ? 'var(--accent-ice)' :
+      el.classList.contains('e-loc') ? 'var(--accent-mint)' :
+      el.classList.contains('e-item') ? 'var(--accent-violet)' :
+      el.classList.contains('e-faction') ? 'var(--accent-orange)' :
+      el.classList.contains('e-tech') ? 'var(--accent-rose)' :
+      'var(--accent-warm)';
+    document.getElementById('entityTipName').textContent = el.dataset.name;
+    document.getElementById('entityTipDesc').textContent = el.dataset.desc;
+    tip.style.left = rect.left + 'px';
+    tip.style.top = (rect.bottom + 8) + 'px';
+    tip.classList.add('show');
+  });
+  el.addEventListener('mouseleave', () => {
+    tip.classList.remove('show');
+  });
+});
+
+// ── selection toolbar ──
+const selToolbar = document.getElementById('selToolbar');
+function triggerSelection() {
+  const editor = document.getElementById('editorContent');
+  const rect = editor.getBoundingClientRect();
+  selToolbar.style.left = (rect.left + rect.width / 2 - 200) + 'px';
+  selToolbar.style.top = (rect.top + 120) + 'px';
+  selToolbar.classList.add('show');
+  setTimeout(() => selToolbar.classList.remove('show'), 4000);
+}
+
+// close panels on outside click
+document.getElementById('editorArea').addEventListener('click', (e) => {
+  if (!e.target.closest('.editor-actions')) closePanel();
+});
+
+// ── editor view switcher ──
+const editorContent = document.getElementById('editorContent');
+const editorBread = document.querySelector('.editor-breadcrumb');
+const editorArea = document.getElementById('editorArea');
+const defaultContent = editorContent.innerHTML;
+const defaultBread = editorBread.innerHTML;
+
+function setBreadcrumb(html) {
+  editorBread.innerHTML = html;
+  editorBread.classList.remove('hidden');
+  lucide.createIcons();
+}
+
+function showView(type) {
+  closePanel();
+  editorContent.classList.remove('hidden');
+  editorBread.classList.remove('hidden');
+
+  switch(type) {
+    case 'settings':
+      setBreadcrumb('<span class="breadcrumb-current">设定集</span>');
+      editorContent.innerHTML = settingsViewHTML();
+      break;
+    case 'outline':
+      setBreadcrumb('<span class="breadcrumb-current">大纲总览</span>');
+      editorContent.innerHTML = outlineViewHTML();
+      break;
+    case 'vol-outline-1':
+      setBreadcrumb('<span class="breadcrumb-item" onclick="showView(\'outline\')">大纲</span><i data-lucide="chevron-right" style="width:12px;height:12px;color:var(--text-muted)"></i><span class="breadcrumb-current">第一卷：破晓 · 卷纲</span>');
+      editorContent.innerHTML = volOutlineHTML1();
+      break;
+    case 'vol-outline-2':
+      setBreadcrumb('<span class="breadcrumb-item" onclick="showView(\'outline\')">大纲</span><i data-lucide="chevron-right" style="width:12px;height:12px;color:var(--text-muted)"></i><span class="breadcrumb-current">第二卷：深渊 · 卷纲</span>');
+      editorContent.innerHTML = volOutlineHTML2();
+      break;
+    case 'ch-outline-5':
+      setBreadcrumb('<span class="breadcrumb-item" onclick="showView(\'vol-outline-2\')">第二卷</span><i data-lucide="chevron-right" style="width:12px;height:12px;color:var(--text-muted)"></i><span class="breadcrumb-current">第5章 深渊之门 · 章纲</span>');
+      editorContent.innerHTML = chOutlineHTML5();
+      break;
+    case 'writing-5':
+      setBreadcrumb('<span class="breadcrumb-item" onclick="showView(\'ch-outline-5\')">章纲</span><i data-lucide="chevron-right" style="width:12px;height:12px;color:var(--text-muted)"></i><span class="breadcrumb-current">第5章 深渊之门</span><span class="breadcrumb-status-dot ch-dot ch-dot-active" style="margin-left:6px"></span><span class="breadcrumb-status-label">写作中</span>');
+      editorContent.innerHTML = writingStateHTML();
+      break;
+    case 'writing-7':
+      setBreadcrumb('<span class="breadcrumb-item" onclick="showView(\'ch-outline-7\')">章纲</span><i data-lucide="chevron-right" style="width:12px;height:12px;color:var(--text-muted)"></i><span class="breadcrumb-current">第7章 觉醒之刻</span><span class="breadcrumb-status-dot ch-dot ch-dot-active" style="margin-left:6px"></span><span class="breadcrumb-status-label">AI生成中</span>');
+      editorContent.innerHTML = writingFromOutlineHTML();
+      break;
+    case 'empty-8':
+      setBreadcrumb('<span class="breadcrumb-item" onclick="showView(\'vol-outline-2\')">第二卷</span><i data-lucide="chevron-right" style="width:12px;height:12px;color:var(--text-muted)"></i><span class="breadcrumb-current">第8章</span>');
+      editorContent.innerHTML = emptyChapterHTML();
+      break;
+    default:
+      setBreadcrumb(defaultBread);
+      editorContent.innerHTML = defaultContent;
+      lucide.createIcons();
+      rebindEntities();
+      return;
+  }
+  lucide.createIcons();
+  editorContent.scrollTop = 0;
+  bindViewClicks();
+}
+
+function bindViewClicks() {
+  document.querySelectorAll('[data-nav]').forEach(el => {
+    el.onclick = () => showView(el.dataset.nav);
+  });
+}
+
+// ── update companion panel with outline context ──
+const companionHeader = document.querySelector('.companion-header');
+const companionMessages = document.querySelector('.companion-messages');
+const originalCompanionHeader = companionHeader.innerHTML;
+
+function updateCompanionOutline() {
+  // inject outline context into companion header area
+  const existing = document.querySelector('.companion-outline');
+  if (existing) existing.remove();
+
+  const outlineDiv = document.createElement('div');
+  outlineDiv.className = 'companion-outline';
+  outlineDiv.innerHTML = `
+    <div class="companion-outline-title"><i data-lucide="file-text" style="width:12px;height:12px"></i> 章纲上下文</div>
+    <div class="companion-outline-section">
+      <div class="companion-outline-label">摘要</div>
+      <div class="companion-outline-item">林默在深渊裂隙发现古神之门，血脉被动觉醒。苏瑶在外围呼唤。神秘声音出现。推门——命运转折。</div>
+    </div>
+    <div class="companion-outline-section">
+      <div class="companion-outline-label">出场角色</div>
+      <div class="companion-outline-item"><span style="color:var(--accent-ice)">林默</span> POV</div>
+      <div class="companion-outline-item"><span style="color:var(--accent-violet)">苏瑶</span> 外围</div>
+      <div class="companion-outline-item"><span style="color:var(--text-muted)">神秘声音</span></div>
+    </div>
+    <div class="companion-outline-section">
+      <div class="companion-outline-label">关键事件进度</div>
+      <div class="companion-outline-item">发现古神之门 ✓</div>
+      <div class="companion-outline-item">血脉被动触发 ✓</div>
+      <div class="companion-outline-item">神秘声音出现 ✓</div>
+      <div class="companion-outline-item companion-outline-current">推开深渊之门 ← 当前</div>
+      <div class="companion-outline-item">（后续事件…）</div>
+    </div>
+    <div class="companion-outline-section">
+      <div class="companion-outline-label">伏笔</div>
+      <div class="companion-outline-item"><span class="companion-outline-tag" style="background:rgba(253,230,138,0.1);color:var(--accent-warm)">回收中</span>沉睡的力量</div>
+      <div class="companion-outline-item"><span class="companion-outline-tag" style="background:rgba(125,211,252,0.08);color:var(--accent-ice)">新埋</span>神秘声音身份</div>
+    </div>
+    <div class="companion-outline-section">
+      <div class="companion-outline-label">约束</div>
+      <div class="companion-outline-item">觉醒 ≤ 筑基后期</div>
+      <div class="companion-outline-item">暗元素触发觉醒</div>
+    </div>
+  `;
+  companionHeader.after(outlineDiv);
+  lucide.createIcons();
+}
+
+// re-bind entity tooltips after content swap
+function rebindEntities() {
+  const tip = document.getElementById('entityTip');
+  document.querySelectorAll('[data-entity]').forEach(el => {
+    el.onmouseenter = (e) => {
+      const rect = el.getBoundingClientRect();
+      document.getElementById('entityTipType').textContent = el.dataset.type;
+      document.getElementById('entityTipType').style.color =
+        el.classList.contains('e-char') ? 'var(--accent-ice)' :
+        el.classList.contains('e-loc') ? 'var(--accent-mint)' :
+        el.classList.contains('e-item') ? 'var(--accent-violet)' :
+        el.classList.contains('e-faction') ? 'var(--accent-orange)' :
+        el.classList.contains('e-tech') ? 'var(--accent-rose)' : 'var(--accent-warm)';
+      document.getElementById('entityTipName').textContent = el.dataset.name;
+      document.getElementById('entityTipDesc').textContent = el.dataset.desc;
+      tip.style.left = rect.left + 'px';
+      tip.style.top = (rect.bottom + 8) + 'px';
+      tip.classList.add('show');
+    };
+    el.onmouseleave = () => tip.classList.remove('show');
+  });
+}
+
+// ── Settings View ──
+function settingsViewHTML() { return `
+<div class="view-settings">
+  <div class="view-title">世界设定集</div>
+  <div class="view-subtitle">万古神帝 · 所有已确认的世界设定数据</div>
+  <div class="settings-grid">
+    <div class="settings-card">
+      <div class="settings-card-head">
+        <div class="settings-card-icon" style="background:rgba(134,239,172,0.1)"><i data-lucide="globe" style="width:18px;height:18px;color:var(--accent-mint)"></i></div>
+        <div class="settings-card-name">世界观</div>
+        <div class="settings-card-count">1</div>
+      </div>
+      <div class="settings-card-desc">苍穹大陆，天历3027年。五大宗门鼎立，古神遗迹遍布四方。灵气复苏时代，暗元素异变加剧。</div>
+      <div class="settings-card-tags"><span class="settings-tag">东方玄幻</span><span class="settings-tag">灵气复苏</span><span class="settings-tag">多势力</span></div>
+    </div>
+    <div class="settings-card">
+      <div class="settings-card-head">
+        <div class="settings-card-icon" style="background:rgba(253,186,116,0.1)"><i data-lucide="shield" style="width:18px;height:18px;color:var(--accent-orange)"></i></div>
+        <div class="settings-card-name">势力范围</div>
+        <div class="settings-card-count">4</div>
+      </div>
+      <div class="settings-card-desc">天虚宗、灵医谷、暗影阁、古神殿。四大势力各有专属功法与领地。</div>
+      <div class="settings-card-tags"><span class="settings-tag">天虚宗</span><span class="settings-tag">灵医谷</span><span class="settings-tag">暗影阁</span><span class="settings-tag">古神殿</span></div>
+    </div>
+    <div class="settings-card">
+      <div class="settings-card-head">
+        <div class="settings-card-icon" style="background:rgba(252,165,165,0.1)"><i data-lucide="flame" style="width:18px;height:18px;color:var(--accent-rose)"></i></div>
+        <div class="settings-card-name">力量等级</div>
+        <div class="settings-card-count">9级</div>
+      </div>
+      <div class="settings-card-desc">炼气 → 筑基(初/中/后) → 金丹 → 元婴 → 化神 → 渡劫 → 大乘。当前主角：筑基中期。</div>
+      <div class="settings-card-tags"><span class="settings-tag">修仙体系</span><span class="settings-tag">9大境界</span></div>
+    </div>
+    <div class="settings-card">
+      <div class="settings-card-head">
+        <div class="settings-card-icon" style="background:rgba(196,181,253,0.1)"><i data-lucide="coins" style="width:18px;height:18px;color:var(--accent-violet)"></i></div>
+        <div class="settings-card-name">货币经济</div>
+        <div class="settings-card-count">3种</div>
+      </div>
+      <div class="settings-card-desc">灵石(日常) · 元晶(大宗交易) · 古神币(稀有交易)。1元晶 = 100灵石。</div>
+      <div class="settings-card-tags"><span class="settings-tag">灵石</span><span class="settings-tag">元晶</span><span class="settings-tag">古神币</span></div>
+    </div>
+    <div class="settings-card">
+      <div class="settings-card-head">
+        <div class="settings-card-icon" style="background:rgba(125,211,252,0.1)"><i data-lucide="map" style="width:18px;height:18px;color:var(--accent-ice)"></i></div>
+        <div class="settings-card-name">地理概况</div>
+        <div class="settings-card-count">8处</div>
+      </div>
+      <div class="settings-card-desc">中州(中央)、东荒、西漠、南林、北荒之地、深渊裂隙、古神遗迹、天虚圣山。</div>
+      <div class="settings-card-tags"><span class="settings-tag">五域</span><span class="settings-tag">三大禁地</span></div>
+    </div>
+    <div class="settings-card">
+      <div class="settings-card-head">
+        <div class="settings-card-icon" style="background:rgba(255,255,255,0.05)"><i data-lucide="scroll" style="width:18px;height:18px;color:var(--text-secondary)"></i></div>
+        <div class="settings-card-name">世界规则</div>
+        <div class="settings-card-count">9条</div>
+      </div>
+      <div class="settings-card-desc">暗元素浓度法则、血脉觉醒条件、战力上限约束、跨境界压制规则等。</div>
+      <div class="settings-card-tags"><span class="settings-tag">硬规则</span><span class="settings-tag">5条</span><span class="settings-tag">软规则</span><span class="settings-tag">4条</span></div>
+    </div>
+  </div>
+</div>`; }
+
+// ── Outline Overview ──
+function outlineViewHTML() { return `
+<div class="view-outline">
+  <div class="view-title">大纲总览</div>
+  <div class="view-subtitle">万古神帝 · 全局故事脉络</div>
+  <div class="outline-section">
+    <div class="outline-vol-card" data-nav="vol-outline-1">
+      <div class="outline-vol-head">
+        <span class="outline-vol-name">第一卷：破晓</span>
+        <div class="outline-vol-progress">
+          <div class="outline-vol-bar"><div class="outline-vol-bar-fill" style="width:100%;background:var(--accent-mint)"></div></div>
+          4/4 章 · 18,400字
+        </div>
+      </div>
+      <div class="outline-vol-summary">主角林默从凡人觉醒古神血脉，经历试炼后被迫逃亡。建立核心角色关系（苏瑶、天虚宗），完成世界观铺设。以「逃入深渊裂隙」为卷末悬念。</div>
+      <div class="outline-vol-chapters">
+        <span class="outline-vol-ch done">第1章 降临</span>
+        <span class="outline-vol-ch done">第2章 觉醒</span>
+        <span class="outline-vol-ch done">第3章 试炼</span>
+        <span class="outline-vol-ch done">第4章 逃亡</span>
+      </div>
+    </div>
+    <div class="outline-vol-card" data-nav="vol-outline-2">
+      <div class="outline-vol-head">
+        <span class="outline-vol-name">第二卷：深渊</span>
+        <div class="outline-vol-progress">
+          <div class="outline-vol-bar"><div class="outline-vol-bar-fill" style="width:35%;background:var(--accent-ice)"></div></div>
+          2/6 章 · 12,600字
+        </div>
+      </div>
+      <div class="outline-vol-summary">林默在深渊裂隙中觉醒古神血脉第一阶段，发现古神遗迹的秘密。苏瑶深入救援，暗影阁介入追杀。以「古神试炼开启」为卷末高潮。</div>
+      <div class="outline-vol-chapters">
+        <span class="outline-vol-ch draft">第5章 深渊之门</span>
+        <span class="outline-vol-ch draft">第6章 暗流涌动</span>
+        <span class="outline-vol-ch">第7章 觉醒之刻</span>
+        <span class="outline-vol-ch">第8章</span>
+        <span class="outline-vol-ch">第9章</span>
+        <span class="outline-vol-ch">第10章</span>
+      </div>
+    </div>
+    <div class="outline-vol-card" style="opacity:0.4">
+      <div class="outline-vol-head">
+        <span class="outline-vol-name">第三卷：（规划中）</span>
+        <div class="outline-vol-progress">
+          <div class="outline-vol-bar"><div class="outline-vol-bar-fill" style="width:0%"></div></div>
+          0/? 章
+        </div>
+      </div>
+      <div class="outline-vol-summary">古神试炼、势力冲突升级、林默身份暴露……</div>
+    </div>
+  </div>
+</div>`; }
+
+// ── Volume Outline ──
+function volOutlineHTML1() { return `
+<div class="view-vol-outline">
+  <div class="view-title">第一卷：破晓</div>
+  <div class="view-subtitle">卷纲 · 4章 · 已完结</div>
+  <div class="vol-phase">
+    <div class="vol-phase-head">
+      <span class="vol-phase-name">第一阶段：降临与觉醒</span>
+      <span class="vol-phase-range">第1-2章</span>
+    </div>
+    <div class="vol-ch-row" data-nav="ch-outline-5">
+      <div class="vol-ch-num">Ch.1</div>
+      <div class="vol-ch-content">
+        <div class="vol-ch-title">降临</div>
+        <div class="vol-ch-desc">林默作为普通青年被卷入灵气复苏事件，在天虚宗外围意外接触古神遗物，血脉初次激活。引入世界观和力量体系。</div>
+      </div>
+    </div>
+    <div class="vol-ch-row">
+      <div class="vol-ch-num">Ch.2</div>
+      <div class="vol-ch-content">
+        <div class="vol-ch-title">觉醒</div>
+        <div class="vol-ch-desc">血脉觉醒引发各方关注，苏瑶首次出场为林默疗伤。天虚宗决定收林默为外门弟子。埋下伏笔「沉睡的力量」。</div>
+      </div>
+    </div>
+  </div>
+  <div class="vol-phase">
+    <div class="vol-phase-head">
+      <span class="vol-phase-name">第二阶段：试炼与逃亡</span>
+      <span class="vol-phase-range">第3-4章</span>
+    </div>
+    <div class="vol-ch-row">
+      <div class="vol-ch-num">Ch.3</div>
+      <div class="vol-ch-content">
+        <div class="vol-ch-title">试炼</div>
+        <div class="vol-ch-desc">天虚宗入门试炼，林默在试炼场中展现古神血脉异能，引起暗影阁注意。势力矛盾初现。</div>
+      </div>
+    </div>
+    <div class="vol-ch-row">
+      <div class="vol-ch-num">Ch.4</div>
+      <div class="vol-ch-content">
+        <div class="vol-ch-title">逃亡</div>
+        <div class="vol-ch-desc">暗影阁夜袭，林默被迫逃入北荒之地。苏瑶暗中相助。卷末：林默坠入深渊裂隙，悬念。</div>
+      </div>
+    </div>
+  </div>
+</div>`; }
+
+function volOutlineHTML2() { return `
+<div class="view-vol-outline">
+  <div class="view-title">第二卷：深渊</div>
+  <div class="view-subtitle">卷纲 · 预计6章 · 进行中</div>
+  <div class="vol-phase">
+    <div class="vol-phase-head">
+      <span class="vol-phase-name">第一阶段：深渊探索</span>
+      <span class="vol-phase-range">第5-6章</span>
+    </div>
+    <div class="vol-ch-row" data-nav="ch-outline-5">
+      <div class="vol-ch-num">Ch.5</div>
+      <div class="vol-ch-content">
+        <div class="vol-ch-title">深渊之门 <span style="color:var(--accent-ice);font-size:11px">写作中</span></div>
+        <div class="vol-ch-desc">林默在深渊裂隙深层发现古神之门，血脉主动觉醒。苏瑶在外围焦急等待。神秘声音首次出现。</div>
+      </div>
+    </div>
+    <div class="vol-ch-row">
+      <div class="vol-ch-num">Ch.6</div>
+      <div class="vol-ch-content">
+        <div class="vol-ch-title">暗流涌动 <span style="color:var(--accent-warm);font-size:11px">草稿</span></div>
+        <div class="vol-ch-desc">暗影阁追踪至北荒，与天虚宗对峙。苏瑶不顾危险深入裂隙寻找林默。外部势力关系复杂化。</div>
+      </div>
+    </div>
+  </div>
+  <div class="vol-phase">
+    <div class="vol-phase-head">
+      <span class="vol-phase-name">第二阶段：觉醒与试炼</span>
+      <span class="vol-phase-range">第7-8章</span>
+    </div>
+    <div class="vol-ch-row">
+      <div class="vol-ch-num">Ch.7</div>
+      <div class="vol-ch-content">
+        <div class="vol-ch-title">觉醒之刻 <span style="color:var(--accent-violet);font-size:11px">有章纲</span></div>
+        <div class="vol-ch-desc">古神血脉完全觉醒第一阶段，林默获得暗元素操控能力。与苏瑶在深渊中重逢。伏笔「沉睡的力量」回收。</div>
+      </div>
+    </div>
+    <div class="vol-ch-row">
+      <div class="vol-ch-num">Ch.8</div>
+      <div class="vol-ch-content">
+        <div class="vol-ch-title">（待规划）</div>
+        <div class="vol-ch-desc" style="color:var(--text-muted)">此章节尚无章纲</div>
+      </div>
+    </div>
+  </div>
+  <div class="vol-phase">
+    <div class="vol-phase-head">
+      <span class="vol-phase-name">第三阶段：高潮与转出</span>
+      <span class="vol-phase-range">第9-10章</span>
+    </div>
+    <div class="vol-ch-row">
+      <div class="vol-ch-num">Ch.9</div>
+      <div class="vol-ch-content">
+        <div class="vol-ch-title">（待规划）</div>
+        <div class="vol-ch-desc" style="color:var(--text-muted)">古神试炼开启，卷末高潮</div>
+      </div>
+    </div>
+    <div class="vol-ch-row">
+      <div class="vol-ch-num">Ch.10</div>
+      <div class="vol-ch-content">
+        <div class="vol-ch-title">（待规划）</div>
+        <div class="vol-ch-desc" style="color:var(--text-muted)">卷末：古神试炼开启。转入第三卷。</div>
+      </div>
+    </div>
+  </div>
+</div>`; }
+
+// ── Chapter Outline ──
+function chOutlineHTML5() { return `
+<div class="view-ch-outline">
+  <div class="view-title">第5章：深渊之门</div>
+  <div class="view-subtitle">章纲 · 第二卷 · 深渊</div>
+
+  <div class="ch-outline-section">
+    <div class="ch-outline-label"><i data-lucide="align-left" style="width:12px;height:12px"></i>章节摘要</div>
+    <div class="ch-outline-summary">林默在深渊裂隙深层发现古神之门，古神血脉被动触发觉醒。苏瑶在外围焦急呼唤。一个神秘的苍老声音在虚空中回荡。林默体内的力量与深渊之门产生共鸣，他必须做出选择——推门，还是退却。本章为「命运转折」关键节点。</div>
+  </div>
+
+  <div class="ch-outline-section">
+    <div class="ch-outline-label"><i data-lucide="users" style="width:12px;height:12px"></i>出场角色</div>
+    <div class="ch-outline-grid">
+      <div class="ch-outline-card">
+        <div class="ch-outline-card-avatar" style="background:linear-gradient(135deg,rgba(125,211,252,0.3),rgba(125,211,252,0.1));color:var(--accent-ice)">林</div>
+        <div class="ch-outline-card-info">
+          <div class="ch-outline-card-name">林默 <span style="font-size:10px;color:var(--accent-ice)">POV</span></div>
+          <div class="ch-outline-card-detail">筑基中期 → 觉醒中 · 古神血脉被动激活</div>
+        </div>
+      </div>
+      <div class="ch-outline-card">
+        <div class="ch-outline-card-avatar" style="background:linear-gradient(135deg,rgba(196,181,253,0.3),rgba(196,181,253,0.1));color:var(--accent-violet)">苏</div>
+        <div class="ch-outline-card-info">
+          <div class="ch-outline-card-name">苏瑶</div>
+          <div class="ch-outline-card-detail">灵医传人 · 裂隙外围 · 焦急状态</div>
+        </div>
+      </div>
+      <div class="ch-outline-card">
+        <div class="ch-outline-card-avatar" style="background:rgba(255,255,255,0.05);color:var(--text-muted)">?</div>
+        <div class="ch-outline-card-info">
+          <div class="ch-outline-card-name">神秘声音</div>
+          <div class="ch-outline-card-detail">身份未明 · 疑似古神残念</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="ch-outline-section">
+    <div class="ch-outline-label"><i data-lucide="map-pin" style="width:12px;height:12px"></i>场景地点</div>
+    <div class="ch-outline-grid">
+      <div class="ch-outline-card">
+        <div class="ch-outline-card-avatar" style="background:rgba(134,239,172,0.1);color:var(--accent-mint)"><i data-lucide="map-pin" style="width:14px;height:14px"></i></div>
+        <div class="ch-outline-card-info">
+          <div class="ch-outline-card-name">深渊裂隙 · 深层</div>
+          <div class="ch-outline-card-detail">苍穹大陆 → 北荒之地 → 深渊裂隙内部</div>
+        </div>
+      </div>
+      <div class="ch-outline-card">
+        <div class="ch-outline-card-avatar" style="background:rgba(134,239,172,0.06);color:rgba(134,239,172,0.6)"><i data-lucide="map-pin" style="width:14px;height:14px"></i></div>
+        <div class="ch-outline-card-info">
+          <div class="ch-outline-card-name">深渊之门（新）</div>
+          <div class="ch-outline-card-detail">暗元素凝聚的石门 · 古神空间入口</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="ch-outline-section">
+    <div class="ch-outline-label"><i data-lucide="list" style="width:12px;height:12px"></i>关键事件</div>
+    <div class="ch-outline-event">
+      <div class="ch-outline-event-dot" style="background:var(--accent-ice)"></div>
+      <div>
+        <div class="ch-outline-event-text">林默深入裂隙，发现古神之门</div>
+        <div class="ch-outline-event-meta">前接：第4章「逃入深渊裂隙」</div>
+      </div>
+    </div>
+    <div class="ch-outline-event">
+      <div class="ch-outline-event-dot" style="background:var(--accent-rose)"></div>
+      <div>
+        <div class="ch-outline-event-text">古神血脉被动触发，开始觉醒</div>
+        <div class="ch-outline-event-meta">引用规则：血脉觉醒条件（暗元素浓度超阈值）</div>
+      </div>
+    </div>
+    <div class="ch-outline-event">
+      <div class="ch-outline-event-dot" style="background:var(--accent-violet)"></div>
+      <div>
+        <div class="ch-outline-event-text">神秘苍老声音出现，暗示古神历史</div>
+        <div class="ch-outline-event-meta">新实体 · 身份待后续揭示</div>
+      </div>
+    </div>
+    <div class="ch-outline-event">
+      <div class="ch-outline-event-dot" style="background:var(--accent-warm)"></div>
+      <div>
+        <div class="ch-outline-event-text">林默推开深渊之门（命运转折点）</div>
+        <div class="ch-outline-event-meta">章纲核心节点 · 连接第6章</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="ch-outline-section">
+    <div class="ch-outline-label"><i data-lucide="link" style="width:12px;height:12px"></i>关联伏笔</div>
+    <div class="ch-outline-foreshadow">
+      <span class="ch-outline-fs-state" style="background:rgba(253,230,138,0.12);color:var(--accent-warm)">回收中</span>
+      <span class="ch-outline-fs-text">「沉睡的力量」— 林默体内的古神血脉觉醒</span>
+      <span class="ch-outline-fs-chapter">第2章埋</span>
+    </div>
+    <div class="ch-outline-foreshadow" style="background:rgba(255,255,255,0.02);border-color:rgba(255,255,255,0.06)">
+      <span class="ch-outline-fs-state" style="background:rgba(125,211,252,0.12);color:var(--accent-ice)">新埋</span>
+      <span class="ch-outline-fs-text">「神秘声音的真实身份」— 古神残念？还是另有其人？</span>
+      <span class="ch-outline-fs-chapter">第5章</span>
+    </div>
+  </div>
+
+  <div class="ch-outline-section">
+    <div class="ch-outline-label"><i data-lucide="scroll" style="width:12px;height:12px"></i>应用的世界规则</div>
+    <div class="ch-outline-grid">
+      <div class="ch-outline-card" style="background:rgba(255,255,255,0.02)">
+        <div style="font-size:12px;color:var(--text-muted)">#1</div>
+        <div class="ch-outline-card-info">
+          <div class="ch-outline-card-name" style="font-size:12px">暗元素浓度法则</div>
+          <div class="ch-outline-card-detail">深渊裂隙暗元素浓度极高，触发血脉被动觉醒</div>
+        </div>
+      </div>
+      <div class="ch-outline-card" style="background:rgba(255,255,255,0.02)">
+        <div style="font-size:12px;color:var(--text-muted)">#3</div>
+        <div class="ch-outline-card-info">
+          <div class="ch-outline-card-name" style="font-size:12px">战力上限约束</div>
+          <div class="ch-outline-card-detail">觉醒不可超过筑基后期上限</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div style="margin-top:24px;display:flex;gap:10px">
+    <button onclick="showView('writing-5')" style="padding:10px 24px;border-radius:10px;border:1px solid rgba(125,211,252,0.2);background:rgba(125,211,252,0.08);color:var(--accent-ice);font-size:14px;font-weight:500;cursor:pointer;font-family:'DM Sans',sans-serif;transition:all var(--duration) var(--ease)">
+      开始写作
+    </button>
+    <button style="padding:10px 24px;border-radius:10px;border:1px solid var(--glass-border);background:transparent;color:var(--text-secondary);font-size:14px;cursor:pointer;font-family:'DM Sans',sans-serif;transition:all var(--duration) var(--ease)">
+      编辑章纲
+    </button>
+  </div>
+</div>`; }
+
+// ── Writing state (with 章纲 context sidebar) ──
+function writingStateHTML() { return `
+<div class="writing-outline-float">
+  <div class="writing-outline-title"><i data-lucide="file-text" style="width:11px;height:11px"></i> 章纲 · 第5章</div>
+  <div class="writing-outline-section">
+    <div class="writing-outline-label">摘要</div>
+    <div class="writing-outline-item">林默发现古神之门，血脉被动觉醒。苏瑶呼唤。神秘声音出现。推门——命运转折。</div>
+  </div>
+  <div class="writing-outline-section">
+    <div class="writing-outline-label">出场角色</div>
+    <div class="writing-outline-entity"><div class="writing-outline-entity-dot" style="background:var(--accent-ice)"></div><span style="color:var(--accent-ice)">林默</span> POV</div>
+    <div class="writing-outline-entity"><div class="writing-outline-entity-dot" style="background:var(--accent-violet)"></div><span style="color:var(--accent-violet)">苏瑶</span> 外围</div>
+    <div class="writing-outline-entity"><div class="writing-outline-entity-dot" style="background:var(--text-muted)"></div>神秘声音</div>
+  </div>
+  <div class="writing-outline-section">
+    <div class="writing-outline-label">场景</div>
+    <div class="writing-outline-item">深渊裂隙·深层 → <span style="color:var(--accent-mint)">深渊之门</span></div>
+  </div>
+  <div class="writing-outline-section">
+    <div class="writing-outline-label">关键事件</div>
+    <div class="writing-outline-item writing-outline-item-done">发现古神之门</div>
+    <div class="writing-outline-item writing-outline-item-done">血脉被动触发</div>
+    <div class="writing-outline-item writing-outline-item-done">神秘声音出现</div>
+    <div class="writing-outline-item writing-outline-item-active">推开深渊之门</div>
+    <div class="writing-outline-item" style="opacity:0.3">推门后的景象</div>
+  </div>
+  <div class="writing-outline-section">
+    <div class="writing-outline-label">伏笔</div>
+    <div class="writing-outline-item"><span class="writing-outline-tag" style="background:rgba(253,230,138,0.1);color:var(--accent-warm)">回收中</span>沉睡的力量</div>
+    <div class="writing-outline-item"><span class="writing-outline-tag" style="background:rgba(125,211,252,0.08);color:var(--accent-ice)">新埋</span>神秘声音身份</div>
+  </div>
+  <div class="writing-outline-section">
+    <div class="writing-outline-label">约束</div>
+    <div class="writing-outline-rule">觉醒 ≤ 筑基后期</div>
+    <div class="writing-outline-rule">暗元素触发觉醒</div>
+  </div>
+</div>
+<p>黑暗如潮水般涌来，<span class="e-char" data-entity="linmo" data-type="角色" data-name="林默" data-desc="古神后裔，28岁，筑基中期">林默</span>感觉自己的意识正在被某种不可抗拒的力量吞噬。他试图挣扎，但身体仿佛被无数根无形的丝线缠绕，动弹不得。</p>
+<p>就在他即将放弃的那一刻，一缕微光出现在意识的深处——那不是外部的光源，而是来自他体内沉睡已久的<span class="e-tech" data-entity="gushenxue" data-type="功法" data-name="古神血脉" data-desc="远古血脉力量，觉醒程度15%">古神血脉</span>。那股力量像是被什么触发了，开始在他的经脉中缓缓流动，带来一丝微弱但真实的温暖。</p>
+<p><span class="e-char" data-entity="suyao" data-type="角色" data-name="苏瑶" data-desc="灵医传人，25岁">苏瑶</span>的声音从远处传来，模糊而焦急："林默！你还好吗？快回应我！"</p>
+<p>他想开口，却发现喉咙像是被什么东西堵住了。古神血脉的温度在持续升高，从温暖变成了灼热，从灼热变成了<span class="e-foreshadow" data-entity="fsh01" data-type="伏笔" data-name="力量觉醒的前兆" data-desc="第2章埋下">难以忍受的灼烧</span>。他感觉自己的血管里流淌的不再是血液，而是岩浆。</p>
+<p>周围的空间开始扭曲。这里是<span class="e-loc" data-entity="abyss" data-type="地点" data-name="深渊裂隙" data-desc="大陆北部的空间裂缝">深渊裂隙</span>的深处，连光线都无法逃逸的地方。但此刻，林默的身体却在发光——微弱的、幽蓝色的光芒从他的皮肤下透出，像是黑暗中唯一的星辰。</p>
+<p>"<span class="e-faction" data-entity="tianxu" data-type="势力" data-name="天虚宗" data-desc="五大宗门之一">天虚宗</span>的记载没有错……"一个苍老的声音在虚空中回荡，"古神的后裔，终将在黑暗中觉醒。"</p>
+<p>林默咬紧牙关，意识在痛苦中逐渐清明。他看到了——在那灼烧的深处，有一扇门。一扇<span class="e-item" data-entity="stone" data-type="物品" data-name="深渊之门" data-desc="古神之力的传送门">由纯粹暗元素凝聚而成的石门</span>，门上刻着他从未见过却能读懂的文字。</p>
+<p style="color:var(--text-muted);font-style:italic">（光标在此处闪烁，等待续写…）</p>`; }
+
+// ── Writing from outline (chapter 7 - AI streaming in editor) ──
+function writingFromOutlineHTML() { return `
+<div class="writing-outline-float">
+  <div class="writing-outline-title"><i data-lucide="file-text" style="width:11px;height:11px"></i> 章纲 · 第7章</div>
+  <div class="writing-outline-section">
+    <div class="writing-outline-label">摘要</div>
+    <div class="writing-outline-item">古神血脉完全觉醒第一阶段，获得暗元素操控。与苏瑶重逢。伏笔「沉睡的力量」回收。</div>
+  </div>
+  <div class="writing-outline-section">
+    <div class="writing-outline-label">出场角色</div>
+    <div class="writing-outline-entity"><div class="writing-outline-entity-dot" style="background:var(--accent-ice)"></div><span style="color:var(--accent-ice)">林默</span> POV · 筑基后期</div>
+    <div class="writing-outline-entity"><div class="writing-outline-entity-dot" style="background:var(--accent-violet)"></div><span style="color:var(--accent-violet)">苏瑶</span> 重逢</div>
+    <div class="writing-outline-entity"><div class="writing-outline-entity-dot" style="background:var(--accent-rose)"></div><span style="color:var(--accent-rose)">暗影阁追兵</span></div>
+  </div>
+  <div class="writing-outline-section">
+    <div class="writing-outline-label">关键事件</div>
+    <div class="writing-outline-item writing-outline-item-done">血脉觉醒第一阶段</div>
+    <div class="writing-outline-item writing-outline-item-active">获得暗元素操控</div>
+    <div class="writing-outline-item" style="opacity:0.3">与苏瑶重逢</div>
+    <div class="writing-outline-item" style="opacity:0.3">暗影阁追兵到达</div>
+  </div>
+  <div class="writing-outline-section">
+    <div class="writing-outline-label">伏笔</div>
+    <div class="writing-outline-item"><span class="writing-outline-tag" style="background:rgba(134,239,172,0.1);color:var(--accent-mint)">回收</span>沉睡的力量 Ch.2→7</div>
+  </div>
+  <div class="writing-outline-section">
+    <div class="writing-outline-label">约束</div>
+    <div class="writing-outline-rule">觉醒上限：筑基后期</div>
+    <div class="writing-outline-rule">暗元素操控消耗灵力</div>
+  </div>
+</div>
+<p>他伸出手。指尖触碰到石门的一瞬，世界安静了——不是寂静，是万物屏息。</p>
+<p>那些暗元素编织的文字在他触碰的刹那亮起，幽蓝的光沿着门上的纹路蔓延，像是唤醒了一条沉睡了亿万年的河流。</p>
+<p>林默的手掌贴在门上，感觉到了脉动。不是他自己的心跳，而是门的。门在跳动。一下、两下、三下，和他胸腔里的节奏渐渐重合，然后——超越了它。</p>
+<p>命运没有齿轮。命运是一扇门。而他在推开它。</p>
+<p>石门无声地裂开一道缝隙，光从那缝隙中涌出——不是照亮黑暗的光，而是将黑暗本身燃尽的光。</p>
+<p class="streaming-line">古神的血脉在林默体内沸腾，如同一条沉睡了亿万年的远古巨龙终于睁开了双眼。他的意识被卷入一片无垠的星海——不，那不是星海，那是记忆。<span class="streaming-cursor"></span></p>`; }
+
+// ── Empty chapter (no outline) ──
+function emptyChapterHTML() { return `
+<div class="empty-state">
+  <div class="empty-state-icon"><i data-lucide="file-plus" style="width:28px;height:28px"></i></div>
+  <div class="empty-state-title">第8章</div>
+  <div class="empty-state-desc">这一章还没有章纲。你可以让 AI 根据卷纲和前文自动生成章纲，也可以自己从零开始规划。</div>
+  <div class="empty-state-actions">
+    <button class="empty-btn empty-btn-primary" onclick="showView('writing-7')">
+      <i data-lucide="sparkles" style="width:16px;height:16px"></i>
+      AI 生成章纲
+    </button>
+    <button class="empty-btn empty-btn-secondary">
+      <i data-lucide="pen-line" style="width:16px;height:16px"></i>
+      手动创建章纲
+    </button>
+    <button class="empty-btn empty-btn-secondary">
+      <i data-lucide="pen-line" style="width:16px;height:16px"></i>
+      直接开始写（跳过章纲）
+    </button>
+  </div>
+</div>`; }
+
+// ── bind chapter list clicks ──
+document.querySelectorAll('.ch-item-special, .ch-item-outline, .ch-item[data-type="chapter"]').forEach(el => {
+  el.addEventListener('click', () => {
+    if (el.classList.contains('ch-item-special')) {
+      const name = el.querySelector('.ch-item-name').textContent;
+      if (name === '设定集') showView('settings');
+      else if (name === '大纲总览') showView('outline');
+    } else if (el.classList.contains('ch-item-outline')) {
+      const vol = el.closest('.ch-volume');
+      const volName = vol.querySelector('.ch-volume-name').textContent;
+      if (volName.includes('第一卷')) showView('vol-outline-1');
+      else showView('vol-outline-2');
+    } else {
+      const name = el.querySelector('.ch-item-name')?.textContent || '';
+      if (name.includes('第5章')) {
+        if (el.classList.contains('active')) showView('writing-5');
+        else showView('ch-outline-5');
+      } else if (name.includes('第7章')) {
+        showView('ch-outline-5'); // has outline, show chapter outline (reuse as demo)
+      } else if (name.includes('第8章')) {
+        showView('empty-8');
+      }
+    }
+  });
+});
+
+// ── flow state cycle demo ──
+const flowStates = ['idle','idle','processing','processing','review','idle'];
+const flowLabels = ['IDLE','IDLE','AI_PROCESSING','AI_PROCESSING','REVIEWING','IDLE'];
+let flowIdx = 0;
+function cycleFlowState() {
+  flowIdx = (flowIdx + 1) % flowStates.length;
+  const s = flowStates[flowIdx];
+  const dot = document.querySelector('.rail-flow-dot');
+  dot.className = 'rail-flow-dot ' + s;
+  const bdot = document.querySelector('#bottomFlow .status-dot');
+  bdot.className = 'status-dot ' + (s === 'processing' ? 'processing' : s === 'review' ? 'idle' : 'idle');
+  document.getElementById('flowStateText').textContent = flowLabels[flowIdx];
+}
+document.getElementById('railFlow').addEventListener('click', cycleFlowState);
+document.getElementById('bottomFlow').addEventListener('click', cycleFlowState);
+</script>
+</body>
+</html>

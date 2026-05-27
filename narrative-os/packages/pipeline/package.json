@@ -1,0 +1,13 @@
+{
+  "name": "@narrative-os/pipeline",
+  "version": "0.0.1",
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "dependencies": {
+    "@narrative-os/engines": "workspace:*",
+    "@narrative-os/database": "workspace:*",
+    "drizzle-orm": "^0.30.0"
+  }
+}

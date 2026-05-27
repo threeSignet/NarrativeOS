@@ -1,0 +1,15 @@
+{
+  "name": "@narrative-os/companion",
+  "version": "0.0.1",
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "dependencies": {
+    "@narrative-os/llm-client": "workspace:*",
+    "@narrative-os/database": "workspace:*",
+    "@narrative-os/engines": "workspace:*",
+    "@narrative-os/pipeline": "workspace:*",
+    "drizzle-orm": "^0.30.0"
+  }
+}

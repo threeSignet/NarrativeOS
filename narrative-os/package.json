@@ -1,0 +1,26 @@
+{
+  "name": "narrative-os",
+  "version": "0.1.0",
+  "private": true,
+  "scripts": {
+    "dev": "pnpm --parallel --filter @narrative-os/server --filter @narrative-os/web run dev",
+    "setup": "node scripts/setup.mjs",
+    "setup:full": "node scripts/setup.mjs --reset",
+    "start": "pnpm dev",
+
+    "db:up": "docker compose up -d",
+    "db:down": "docker compose down",
+    "db:logs": "docker compose logs -f",
+    "db:psql": "docker exec -it narrativeos-postgres psql -U narrativeos -d narrativeos",
+    "db:redis-cli": "docker exec -it narrativeos-redis redis-cli -a \"$REDIS_PASSWORD\"",
+    "db:push": "pnpm --filter @narrative-os/database db:push",
+    "db:studio": "pnpm --filter @narrative-os/database db:studio",
+    "db:migrate": "pnpm --filter @narrative-os/database exec tsx packages/database/migrate.ts",
+    "db:init-db": "docker exec -i narrativeos-postgres psql -U narrativeos -d narrativeos < packages/database/src/migrations/001_embeddings.sql",
+    "db:init": "pnpm db:push && pnpm db:migrate && pnpm db:init-db",
+    "db:reset": "docker exec narrativeos-postgres psql -U narrativeos -d narrativeos -c \"TRUNCATE TABLE ai_proposals, chapters, discussions, llm_logs, mou_states, notification_reads, notifications, outline_items, outlines, project_daily_stats, project_settings, projects, sessions, setting_item_relations, setting_items, volumes CASCADE;\""
+  },
+  "devDependencies": {
+    "typescript": "^5.4.0"
+  }
+}

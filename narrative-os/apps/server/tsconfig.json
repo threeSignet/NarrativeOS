@@ -1,0 +1,22 @@
+{
+  "compilerOptions": {
+    "target": "ES2022",
+    "module": "ESNext",
+    "moduleResolution": "bundler",
+    "strict": true,
+    "esModuleInterop": true,
+    "skipLibCheck": true,
+    "forceConsistentCasingInFileNames": true,
+    "noEmit": true,
+    "resolveJsonModule": true,
+    "allowImportingTsExtensions": true,
+    "paths": {
+      "@narrative-os/database": ["../../packages/database/src/index.ts"],
+      "@narrative-os/llm-client": ["../../packages/llm-client/src/index.ts"],
+      "@narrative-os/companion": ["../../packages/companion/src/index.ts"],
+      "@narrative-os/engines": ["../../packages/engines/src/index.ts"],
+      "@narrative-os/pipeline": ["../../packages/pipeline/src/index.ts"]
+    }
+  },
+  "include": ["src"]
+}

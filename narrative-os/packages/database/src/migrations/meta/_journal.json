@@ -1,0 +1,48 @@
+{
+  "version": "6",
+  "dialect": "postgresql",
+  "entries": [
+    {
+      "idx": 0,
+      "version": "6",
+      "when": 1779420535243,
+      "tag": "0000_mysterious_dazzler",
+      "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "6",
+      "when": 1780000000000,
+      "tag": "incremental_from_0000",
+      "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "6",
+      "when": 1780100000000,
+      "tag": "incremental_phase2",
+      "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "6",
+      "when": 1780200000000,
+      "tag": "001_embeddings",
+      "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "6",
+      "when": 1780300000000,
+      "tag": "incremental_relation_types",
+      "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "6",
+      "when": 1780400000000,
+      "tag": "002_time_dimension",
+      "breakpoints": true
+    }
+  ]
+}

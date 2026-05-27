@@ -1,0 +1,9 @@
+packages:
+  - 'apps/*'
+  - 'packages/*'
+allowBuilds:
+  es5-ext: set this to true or false
+  esbuild: set this to true or false
+  onnxruntime-node: true
+  protobufjs: true
+  sharp: true
