@@ -82,10 +82,18 @@ export default function ProjectEditor() {
   }, [id, realtimeConnect, realtimeDisconnect])
 
   useEffect(() => {
-    // WS new_proposals：仅跨 tab 同步用。streaming 期间忽略（SSE done 统一驱动）
+    // WS new_proposals：皇帝模式 — 后端自动运行完成，前端同步数据并弹出 MOU
     // 使用 getState() 避免 stale closure，确保获取最新 phase
     const unsubNew = realtimeOn('new_proposals', () => {
-      if (id && useHatchStore.getState().phase !== 'streaming') { fetchProposals(id); fetchEngines(id); }
+      if (id && useHatchStore.getState().phase !== 'streaming') {
+        fetchProposals(id).then(() => {
+          const pending = useHatchStore.getState().proposals.filter((p) => p.status === 'pending')
+          if (pending.length > 0) {
+            useHatchStore.getState().setProposalListOpen(true)
+          }
+        })
+        fetchEngines(id)
+      }
     })
     const unsubStaged = realtimeOn('proposals_staged', () => {
       if (id && useHatchStore.getState().phase !== 'streaming') { fetchProposals(id); fetchEngines(id); }
@@ -129,6 +137,7 @@ export default function ProjectEditor() {
   const startStudioPhase = useHatchStore((s) => s.startStudioPhase)
   const hatchGroup = useHatchStore((s) => s.hatchGroup)
   const runEngine = useHatchStore((s) => s.runEngine)
+  const locked = useHatchStore((s) => s.locked)
   const approveProposal = useHatchStore((s) => s.approveProposal)
   const rejectProposal = useHatchStore((s) => s.rejectProposal)
   const reviseProposal = useHatchStore((s) => s.reviseProposal)
@@ -300,6 +309,11 @@ export default function ProjectEditor() {
         const completePhase = useHatchStore.getState().completePhase
         completePhase(project.id, phase)
       }}
+      onActivateProject={() => {
+        const activateProject = useHatchStore.getState().activateProject
+        activateProject(project.id)
+      }}
+      locked={locked}
     />
   ) : editorView === 'outline' ? (
     <OutlineOverviewView

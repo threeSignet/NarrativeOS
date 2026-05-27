@@ -86,7 +86,16 @@
       "Bash(git remote *)",
       "Bash(git add *)",
       "Bash(python -c \"import sys,json; data=json.loads\\(sys.stdin.buffer.read\\(\\)\\); print\\(data['choices'][0]['message']['content']\\)\")",
-      "Bash(iconv -f utf-8 -t utf-8)"
+      "Bash(iconv -f utf-8 -t utf-8)",
+      "Skill(superpowers:systematic-debugging)",
+      "Skill(superpowers:writing-plans)",
+      "PowerShell(New-Item *)",
+      "Skill(superpowers:subagent-driven-development)",
+      "Bash(pnpm *)",
+      "Bash(git *)",
+      "Bash(findstr /I \"error\")",
+      "Bash(echo \"Exit code: $?\")",
+      "Bash(echo \"---exit code: $?---\")"
     ]
   },
   "enabledPlugins": {

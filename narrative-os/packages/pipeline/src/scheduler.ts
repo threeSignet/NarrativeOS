@@ -8,11 +8,18 @@ import { getRunnableEngines, HATCH_ENGINES, SCALE_CHAIN, loadProjectScales, getP
 
 export type SchedulerEventType =
   | "engine_started"
-  | "engine_completed"
+  | "engine_done"
   | "proposals_staged"
   | "project_activated"
   | "error"
-  | "proactive_triggered";
+  | "proactive_triggered"
+  | "engine_chunk"
+  | "engine_model"
+  | "engine_usage"
+  | "engine_tool_call"
+  | "engine_tool_result"
+  | "engine_generation_start"
+  | "engine_error";
 
 export interface SchedulerEvent {
   type: SchedulerEventType;
@@ -21,6 +28,7 @@ export interface SchedulerEvent {
   proposalIds?: string[];
   error?: string;
   trigger?: string;
+  payload?: Record<string, unknown>;
 }
 
 // 孵化阶段引擎（依赖图驱动，顺序执行，等用户审批后触发下一个）
@@ -105,7 +113,7 @@ export class EngineScheduler {
     this.listen("chapter.committed", (event) => {
       this.runProactiveEngines(event.projectId, event.chapterId).catch((err: Error) => {
         this.emit({
-          type: "error",
+          type: "engine_error",
           projectId: event.projectId,
           error: `Proactive engine error: ${err.message}`,
         });
@@ -544,7 +552,7 @@ export class EngineScheduler {
           })
           .catch((err: Error) => {
             this.emit({
-              type: "error",
+              type: "engine_error",
               projectId,
               node: engineName,
               error: err.message,
@@ -604,25 +612,60 @@ export class EngineScheduler {
         ...extraContext,
       };
 
-      console.log(`[scheduler] Running ${engineName} node...`);
-      const result = await node.run(ctx);
-      console.log(`[scheduler] ${engineName} completed, proposals: ${result.proposals.length}`);
+      console.log(`[scheduler] Streaming ${engineName}...`);
+      let result: import("@narrative-os/engines").EngineResult | undefined;
+      for await (const event of node.streamRun(ctx)) {
+        if (event.type === "chunk") {
+          this.emit({ type: "engine_chunk", projectId, node: engineName, payload: { text: event.text, engine: engineName } });
+        } else if (event.type === "model") {
+          this.emit({ type: "engine_model", projectId, node: engineName, payload: { engine: engineName, ...event.info } });
+        } else if (event.type === "usage") {
+          this.emit({ type: "engine_usage", projectId, node: engineName, payload: { engine: engineName, ...event.usage } });
+        } else if (event.type === "error") {
+          this.emit({ type: "engine_error", projectId, node: engineName, error: event.message, payload: { engine: engineName, message: event.message } });
+        } else if (event.type === "tool_call") {
+          this.emit({ type: "engine_tool_call", projectId, node: engineName, payload: { engine: engineName, toolCallId: event.toolCallId, toolName: event.toolName } });
+        } else if (event.type === "tool_result") {
+          this.emit({ type: "engine_tool_result", projectId, node: engineName, payload: { engine: engineName, toolCallId: event.toolCallId } });
+        } else if ((event as any).type === "generation") {
+          this.emit({ type: "engine_generation_start", projectId, node: engineName, payload: { engine: engineName, start: true } });
+        } else if (event.type === "done") {
+          result = event.result;
+        }
+      }
 
+      if (!result) {
+        const msg = "Node returned no result";
+        console.error(`[scheduler] ${engineName}: ${msg}`);
+        this.emit({ type: "engine_error", projectId, node: engineName, error: msg });
+        return;
+      }
+
+      console.log(`[scheduler] ${engineName} completed, proposals: ${result.proposals.length}`);
+      if (result.proposals.length === 0) {
+        const rawPreview = result.pipeline?.rawOutput?.substring(0, 500) || 'N/A';
+        console.log(`[scheduler] ${engineName} raw output preview: ${rawPreview}`);
+      }
+
+      let proposalIds: string[] = [];
       if (result.proposals.length > 0) {
-        const ids = await this.orchestrator.stageProposals(
+        proposalIds = await this.orchestrator.stageProposals(
           projectId,
           session.id,
           result,
           engineName
         );
-        console.log(`[scheduler] ${engineName} staged ${ids.length} proposals`);
+        console.log(`[scheduler] ${engineName} staged ${proposalIds.length} proposals`);
       }
 
-      this.emit({ type: "engine_completed", projectId, node: engineName });
+      this.emit({ type: "engine_done", projectId, node: engineName, payload: { engine: engineName, proposalCount: proposalIds.length } });
+      if (proposalIds.length > 0) {
+        this.emit({ type: "proposals_staged", projectId, proposalIds });
+      }
     } catch (err: any) {
       console.error(`[scheduler] ${engineName} failed:`, err.message);
       this.emit({
-        type: "error",
+        type: "engine_error",
         projectId,
         node: engineName,
         error: err.message,
@@ -881,11 +924,11 @@ export class EngineScheduler {
         console.log(`[scheduler] Refinement staged ${proposalIds.length} proposals`);
       }
 
-      this.emit({ type: "engine_completed", projectId, node: `${engineName}:refine` });
+      this.emit({ type: "engine_done", projectId, node: `${engineName}:refine` });
       return proposalIds;
     } catch (err: any) {
       console.error(`[scheduler] Refinement failed:`, err.message);
-      this.emit({ type: "error", projectId, node: `${engineName}:refine`, error: err.message });
+      this.emit({ type: "engine_error", projectId, node: `${engineName}:refine`, error: err.message });
       return [];
     } finally {
       this.setRunning(projectId, lockKey, false);

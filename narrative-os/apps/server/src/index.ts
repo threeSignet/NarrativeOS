@@ -91,7 +91,7 @@ const scheduler = new EngineScheduler({
   onEvent: (event) => {
     wsBus.push(event.projectId, {
       type: event.type,
-      payload: { node: event.node, error: event.error, proposalIds: event.proposalIds, trigger: event.trigger },
+      payload: { node: event.node, error: event.error, proposalIds: event.proposalIds, trigger: event.trigger, ...event.payload },
     });
   },
 });

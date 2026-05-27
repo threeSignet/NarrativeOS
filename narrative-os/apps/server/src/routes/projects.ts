@@ -1,5 +1,5 @@
 import { Hono } from "hono";
-import { db, projects } from "@narrative-os/database";
+import { db, projects, projectSettings } from "@narrative-os/database";
 import { desc, eq, isNull } from "drizzle-orm";
 import { validateUUID } from "../validation";
 
@@ -179,6 +179,45 @@ app.post("/:id/archive", async (c) => {
     .where(eq(projects.id, id));
 
   return c.json({ success: true });
+});
+
+// Activate project — 设定集锁定，从 hatching → active
+app.post("/:id/activate", async (c) => {
+  const id = c.req.param("id");
+  const uuidErr = validateUUID(id, "projectId");
+  if (uuidErr) return c.json({ error: uuidErr }, 400);
+
+  const [existing] = await db.select().from(projects).where(eq(projects.id, id));
+  if (!existing) return c.json({ error: "not found" }, 404);
+  if (existing.status !== "hatching") {
+    return c.json({ error: "only hatching projects can be activated" }, 400);
+  }
+
+  const [updated] = await db
+    .update(projects)
+    .set({ status: "active", updatedAt: new Date() })
+    .where(eq(projects.id, id))
+    .returning();
+
+  // Upsert project_settings: insert if not exists, otherwise update
+  const [existingSettings] = await db
+    .select()
+    .from(projectSettings)
+    .where(eq(projectSettings.projectId, id));
+
+  if (existingSettings) {
+    await db
+      .update(projectSettings)
+      .set({ lockedAt: new Date(), updatedAt: new Date() })
+      .where(eq(projectSettings.projectId, id));
+  } else {
+    await db.insert(projectSettings).values({
+      projectId: id,
+      lockedAt: new Date(),
+    });
+  }
+
+  return c.json(updated);
 });
 
 export default app;
