@@ -445,67 +445,53 @@ export class EngineScheduler {
 
     if (stillPending.length > 0) return;
 
-    // 2. 不再自动运行细化循环 — 细化由用户手动触发
-    //    用户通过前端按钮或 API 调用 scheduler.refineItem() 触发细化
+    // 2. 检查是否有待细化条目 → 自动运行细化
+    const refinable = await this.getItemsNeedingRefinement(projectId);
+    if (refinable.length > 0) {
+      console.log(`[scheduler] 发现 ${refinable.length} 个待细化条目，启动细化...`);
+      await this.runRefinementLoop(projectId);
+      return;
+    }
 
     // 3. 没有 pending 且没有待细化 → 推进到下一个引擎
     await this.runMissingEngines(projectId);
   }
 
   /**
-   * 细化自动循环：逐个细化待细化的条目，每步自动审批结果。
-   * 细化是执行的延续，不需要用户再选方案（方向已在初始 pass 确定）。
+   * 细化循环：逐个细化待细化的条目，生成提案后等待用户 MOU 审批。
+   * 用户审批后 onProposalsResolved 被再次调用，继续下一个细化条目。
    */
   private async runRefinementLoop(projectId: string): Promise<void> {
-    const MAX_ITERATIONS = 100;
-    for (let i = 0; i < MAX_ITERATIONS; i++) {
-      const refinableItems = await this.getItemsNeedingRefinement(projectId);
-      if (refinableItems.length === 0) {
-        console.log(`[scheduler] 细化循环完成：所有条目已细化到底`);
-        break;
-      }
-
-      const first = refinableItems[0];
-      console.log(`[scheduler] 细化循环 #${i + 1}: ${first.engineSource}/${first.name} (${first.scale} → ${first.targetScale}), 剩余 ${refinableItems.length} 个`);
-
-      // 运行细化引擎
-      const proposalIds = await this.refineItem(projectId, first.id);
-
-      if (proposalIds.length === 0) {
-        console.warn(`[scheduler] 细化循环：${first.name} 未产生提案，跳过`);
-        // 清除父条目的 needs_refinement 防止死循环
-        await db
-          .update(settingItems)
-          .set({ content: sql`jsonb_set(${settingItems.content}, '{needs_refinement}', 'false')`, updatedAt: new Date() })
-          .where(eq(settingItems.id, first.id));
-        continue;
-      }
-
-      // 自动审批所有细化提案（取第一个，supersede 其余）
-      for (const pid of proposalIds) {
-        try {
-          await this.orchestrator.approveProposal(pid, "细化自动审批");
-          console.log(`[scheduler] 细化自动审批: ${pid.substring(0, 8)}`);
-        } catch (err: any) {
-          console.error(`[scheduler] 细化自动审批失败 ${pid}: ${err.message}`);
-          // 如果审批失败，标记父条目跳过，防止死循环
-          await db
-            .update(settingItems)
-            .set({ content: sql`jsonb_set(${settingItems.content}, '{needs_refinement}', 'false')`, updatedAt: new Date() })
-            .where(eq(settingItems.id, first.id));
-          break;
-        }
-      }
-
-      // 细化+审批完成，推送通知前端刷新状态
-      bus.emit({
-        type: "setting.items_created" as any,
-        projectId,
-        proposalId: proposalIds[0],
-        itemIds: [],
-        relationIds: [],
-      });
+    const refinableItems = await this.getItemsNeedingRefinement(projectId);
+    if (refinableItems.length === 0) {
+      console.log(`[scheduler] 细化完成：无待细化条目`);
+      // 细化全部完成，触发下一引擎
+      await this.runMissingEngines(projectId);
+      return;
     }
+
+    const first = refinableItems[0];
+    console.log(`[scheduler] 细化: ${first.engineSource}/${first.name} (${first.scale}→${first.targetScale})`);
+
+    // 运行细化引擎
+    const proposalIds = await this.refineItem(projectId, first.id);
+
+    if (proposalIds.length === 0) {
+      console.warn(`[scheduler] 细化循环：${first.name} 未产生提案，跳过`);
+      // 清除父条目的 needs_refinement 防止死循环
+      await db
+        .update(settingItems)
+        .set({ content: sql`jsonb_set(${settingItems.content}, '{needs_refinement}', 'false')`, updatedAt: new Date() })
+        .where(eq(settingItems.id, first.id));
+      // 递归继续下一个
+      await this.runRefinementLoop(projectId);
+      return;
+    }
+
+    // 关键改动：不再自动审批。提案已 stage 为 pending，等待用户 MOU 审批。
+    // 用户审批后，approveProposal 端点会触发 onProposalsResolved，继续下一个细化条目。
+    console.log(`[scheduler] 细化提案已 stage (${proposalIds.length} 个)，等待用户审批`);
+    this.emit({ type: "proposals_staged", projectId, proposalIds });
   }
 
   // ─────────────────────────────────────────────
