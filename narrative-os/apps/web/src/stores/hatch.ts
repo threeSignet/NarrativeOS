@@ -414,7 +414,7 @@ export const useHatchStore = create<HatchStore>((set, get) => ({
             set({ _lastTokenUpdate: now })
           }
         },
-        onError: (message) => { set({ error: message || '引擎运行出错' }) },
+        onError: (message) => { set({ error: message || 'AI 生成出错' }) },
         onStaged: () => {
           // staged 事件后引擎名已确定，更新 LLM job 显示
           const eng = get().currentEngine
@@ -480,6 +480,7 @@ export const useHatchStore = create<HatchStore>((set, get) => ({
           const engLabel = engines.find((e: any) => e.name === displayEngine)?.label || displayEngine
           if (engLabel) get().updateLLMJob(jobId, { jobLabel: engLabel } as any)
           // 嵌入提案 — 使用后端返回的实际引擎名作为 sourceNode（修复 P2-12）
+          let newlyEmbedded = 0
           if (parsed.proposals && Array.isArray(parsed.proposals)) {
             const existingIds = new Set(get().proposals.map((p) => p.id))
             const embedded: Proposal[] = (parsed.proposals as any[])
@@ -490,12 +491,12 @@ export const useHatchStore = create<HatchStore>((set, get) => ({
                 content: p.content || { reasoning: p.reasoning },
                 createdAt: new Date().toISOString(),
               }))
-            if (embedded.length > 0) set({ proposals: [...get().proposals, ...embedded] })
+            newlyEmbedded = embedded.length
+            if (newlyEmbedded > 0) set({ proposals: [...get().proposals, ...embedded] })
           }
-          // 检查 proposalCount，如果为 0 且没有 error 字段，记录错误
-          const proposalCount = (parsed.proposalCount as number) ?? 0
-          if (proposalCount === 0 && !parsed.error) {
-            set({ error: `引擎运行完成，但未生成任何提案。可能原因：LLM 输出格式不正确或解析失败。` })
+          // 检查嵌入的提案数量，如果为 0 且没有 error 字段，记录错误
+          if (newlyEmbedded === 0 && !parsed.error) {
+            set({ error: `AI 生成完成，但没有产出可用的方案。可能原因：生成内容不符合格式要求。请重试。` })
           }
         },
       })
@@ -629,7 +630,7 @@ export const useHatchStore = create<HatchStore>((set, get) => ({
         if (hasStudioActivity) hatchGroup = 'studio'
       }
 
-      set({ proposals, phase, hatchGroup, autoPopupProposalId: autoPopupId })
+      set({ proposals, phase, hatchGroup, autoPopupProposalId: autoPopupId, error: null })
     } catch (err) {
       console.error('[hatch] fetchProposals failed:', err)
       if (!get().error) set({ error: '加载提案失败' })

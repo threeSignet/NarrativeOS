@@ -643,11 +643,6 @@ export default function HatchingView({ project, phase, proposals, engines, curre
                 <p style={{ fontSize: 13, color: 'var(--text-secondary)', lineHeight: 1.6, maxWidth: 420 }}>
                   AI 正在准备{waitingLabel ? `「${waitingLabel}」` : '下一阶段'}的设计，请稍候...
                 </p>
-                {hatchError && (
-                  <p style={{ fontSize: 12, color: 'var(--accent-rose)', lineHeight: 1.5, maxWidth: 420 }}>
-                    {hatchError}
-                  </p>
-                )}
               </div>
             </>
           )}
