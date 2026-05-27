@@ -127,4 +127,5 @@ export function getChildScale(scale: string): string | undefined {
 export const VALID_RELATION_TYPES = [
   "hierarchy", "reference", "opposition", "dependency",
   "geographic", "affiliation", "adjacency", "functional",
+  "passage", "barrier", "engulfment", "resonance", "phase_shift", "absence",
 ] as const;

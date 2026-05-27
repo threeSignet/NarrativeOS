@@ -14,6 +14,7 @@
  *   const results = await vs.similaritySearch({ projectId, queryEmbedding });
  */
 
+import { sql } from "drizzle-orm";
 import type { EmbeddingSourceType, InsertEmbedding, TextChunk, ChunkParams, VectorSearchParams, VectorSearchResult } from "./embedding-types";
 
 /** 嵌入模型常量 */
@@ -176,7 +177,7 @@ export class VectorService {
    */
   async ensurePartition(projectId: string): Promise<void> {
     await this.db.execute(
-      `SELECT create_embeddings_partition('${projectId}')`
+      sql`SELECT create_embeddings_partition(${projectId})`
     );
   }
 
@@ -221,8 +222,8 @@ export class VectorService {
       });
 
       const result = await this.db.execute(
-        `INSERT INTO embeddings (project_id, source_type, source_id, chunk_index, chunk_text, chunk_length, embedding, meta_jsonb)
-         VALUES ('${projectId}', '${sourceType}', '${sourceId}', ${chunks[i].index}, '${this.escapeSql(chunks[i].text)}', ${chunks[i].text.length}, '${vectorStr}', '${metaJson}')
+        sql`INSERT INTO embeddings (project_id, source_type, source_id, chunk_index, chunk_text, chunk_length, embedding, meta_jsonb)
+         VALUES (${projectId}, ${sourceType}, ${sourceId}, ${chunks[i].index}, ${chunks[i].text}, ${chunks[i].text.length}, ${vectorStr}::vector, ${metaJson})
          RETURNING embedding_id`
       );
 
@@ -248,26 +249,39 @@ export class VectorService {
     } = params;
 
     const vectorStr = `[${queryEmbedding.join(",")}]`;
-    const sourceFilter = sourceType
-      ? `AND source_type = '${sourceType}'`
-      : "";
 
-    const result = await this.db.execute(
-      `SELECT
-         embedding_id,
-         chunk_text,
-         source_type::TEXT,
-         source_id,
-         chunk_index,
-         meta_jsonb,
-         (1 - (embedding <=> '${vectorStr}'))::REAL AS similarity
-       FROM embeddings
-       WHERE project_id = '${projectId}'
-         ${sourceFilter}
-         AND (1 - (embedding <=> '${vectorStr}')) > ${similarityThreshold}
-       ORDER BY embedding <=> '${vectorStr}'
-       LIMIT ${limit}`
-    );
+    const result = sourceType
+      ? await this.db.execute(
+          sql`SELECT
+             embedding_id,
+             chunk_text,
+             source_type::TEXT,
+             source_id,
+             chunk_index,
+             meta_jsonb,
+             (1 - (embedding <=> ${vectorStr}::vector))::REAL AS similarity
+           FROM embeddings
+           WHERE project_id = ${projectId}
+             AND source_type = ${sourceType}
+             AND (1 - (embedding <=> ${vectorStr}::vector)) > ${similarityThreshold}
+           ORDER BY embedding <=> ${vectorStr}::vector
+           LIMIT ${limit}`
+        )
+      : await this.db.execute(
+          sql`SELECT
+             embedding_id,
+             chunk_text,
+             source_type::TEXT,
+             source_id,
+             chunk_index,
+             meta_jsonb,
+             (1 - (embedding <=> ${vectorStr}::vector))::REAL AS similarity
+           FROM embeddings
+           WHERE project_id = ${projectId}
+             AND (1 - (embedding <=> ${vectorStr}::vector)) > ${similarityThreshold}
+           ORDER BY embedding <=> ${vectorStr}::vector
+           LIMIT ${limit}`
+        );
 
     return (result?.rows || []).map((row: Record<string, unknown>) => ({
       embeddingId: row.embedding_id as string,
@@ -285,7 +299,7 @@ export class VectorService {
    */
   async deleteBySource(sourceId: string): Promise<number> {
     const result = await this.db.execute(
-      `DELETE FROM embeddings WHERE source_id = '${sourceId}'`
+      sql`DELETE FROM embeddings WHERE source_id = ${sourceId}`
     );
     return result?.rowCount || 0;
   }
@@ -299,13 +313,13 @@ export class VectorService {
     bySourceType: Record<string, number>;
   }> {
     const result = await this.db.execute(
-      `SELECT
+      sql`SELECT
          COUNT(*) as total_chunks,
          COALESCE(SUM(chunk_length), 0) as total_chars,
          source_type,
          COUNT(*) as cnt
        FROM embeddings
-       WHERE project_id = '${projectId}'
+       WHERE project_id = ${projectId}
        GROUP BY source_type`
     );
 
@@ -324,10 +338,4 @@ export class VectorService {
     return { totalChunks, totalCharacters, bySourceType };
   }
 
-  /** SQL 字符串转义（防止注入） */
-  private escapeSql(str: string): string {
-    return str
-      .replace(/'/g, "''")
-      .replace(/\\/g, "\\\\");
-  }
 }
