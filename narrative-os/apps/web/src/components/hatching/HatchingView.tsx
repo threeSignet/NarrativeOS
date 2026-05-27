@@ -512,18 +512,33 @@ export default function HatchingView({ project, phase, proposals, engines, curre
     // ── WAITING_PHASE_CONFIRMATION ──
     if (phase === 'waiting_phase_confirmation') {
       return (
-        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 24, padding: '48px 20px', textAlign: 'center' }}>
-          <div style={{ width: 56, height: 56, borderRadius: 14, background: 'rgba(253,230,138,0.08)', border: '1px solid rgba(253,230,138,0.15)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-            <MapPin size={24} style={{ color: 'var(--accent-warm)' }} />
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 16, padding: '20px 0' }}>
+          {/* 状态标题 */}
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+            <div style={{
+              width: 8, height: 8, borderRadius: '50%',
+              background: 'var(--accent-warm)',
+              boxShadow: '0 0 8px var(--accent-warm)',
+            }} />
+            <span style={{ fontSize: 14, color: 'var(--text-primary)', fontWeight: 500 }}>
+              「{engineLabelMap[phaseConfirmationTarget || ''] || phaseConfirmationTarget || '...'}」阶段完成，等待确认
+            </span>
           </div>
-          <div>
-            <h2 style={{ fontFamily: 'var(--font-brand)', fontSize: 20, color: 'var(--text-primary)', marginBottom: 6 }}>
-              地理环境阶段完成
-            </h2>
-            <p style={{ fontSize: 13, color: 'var(--text-muted)', lineHeight: 1.6, maxWidth: 420 }}>
-              地理环境阶段已有产出。确认完成后，系统将推进到后续世界观引擎。
-            </p>
-          </div>
+
+          {/* 流式输出框 — 显示上次生成内容 */}
+          {displayText && (
+            <div style={{
+              height: 'calc(100vh - 400px)', minHeight: 280,
+              padding: 20, borderRadius: 12,
+              background: 'rgba(255,255,255,0.02)', border: '1px solid var(--glass-border)',
+              fontFamily: 'var(--font-mono)', fontSize: 13, lineHeight: 1.8,
+              color: 'var(--text-secondary)', whiteSpace: 'pre-wrap', overflowY: 'auto',
+            }}>
+              {displayText}
+            </div>
+          )}
+
+          {/* 确认按钮 */}
           <button onClick={() => onCompletePhase?.(phaseConfirmationTarget || 'geography')} style={{
             display: 'inline-flex', alignItems: 'center', gap: 8,
             padding: '14px 28px', borderRadius: 10,
@@ -531,6 +546,7 @@ export default function HatchingView({ project, phase, proposals, engines, curre
             border: '1px solid rgba(253,230,138,0.25)',
             fontSize: 14, fontWeight: 600, cursor: 'pointer', fontFamily: 'var(--font-ui)',
             transition: 'all var(--duration) var(--ease)',
+            alignSelf: 'center',
           }}
             onMouseEnter={(e) => { e.currentTarget.style.background = 'rgba(253,230,138,0.2)' }}
             onMouseLeave={(e) => { e.currentTarget.style.background = 'rgba(253,230,138,0.12)' }}
@@ -544,57 +560,50 @@ export default function HatchingView({ project, phase, proposals, engines, curre
 
     // ── WAITING ──
     const waitingEngine = currentEngine || pipeline.find((s) => s.status === 'waiting_approval')?.node || null
-    const nextPending = pipeline.find((s) => s.status === 'pending')
-    const waitingLabel = waitingEngine
-      ? (engineLabelMap[waitingEngine] || waitingEngine)
-      : (nextPending ? (engineLabelMap[nextPending.node] || nextPending.label) : null)
+    const waitingLabel = waitingEngine ? (engineLabelMap[waitingEngine] || waitingEngine) : null
 
     return (
       <div style={{ display: 'flex', flexDirection: 'column', gap: 16, padding: '20px 0' }}>
-        {/* Status line */}
+        {/* 状态标题 */}
         <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-          <div style={{
-            width: 8, height: 8, borderRadius: '50%',
-            background: pending.length > 0 ? 'var(--accent-warm)' : 'var(--accent-violet)',
-            boxShadow: pending.length > 0
-              ? '0 0 8px var(--accent-warm)'
-              : '0 0 8px var(--accent-violet)',
-          }} />
-          <span style={{ fontSize: 14, color: 'var(--text-primary)', fontWeight: 500 }}>
-            {pending.length > 0
-              ? `「${waitingLabel || '...'}」方案待审批`
-              : `正在准备「${waitingLabel || '下一阶段'}」...`}
-          </span>
-          {pending.length > 0 && (
-            <span style={{ fontSize: 12, color: 'var(--accent-warm)', fontWeight: 500 }}>
-              {pending.length} 个方案
-            </span>
+          {pending.length > 0 ? (
+            <>
+              <div style={{
+                width: 8, height: 8, borderRadius: '50%',
+                background: 'var(--accent-warm)',
+                boxShadow: '0 0 8px var(--accent-warm)',
+              }} />
+              <span style={{ fontSize: 14, color: 'var(--text-primary)', fontWeight: 500 }}>
+                「{waitingLabel || '...'}」方案待审批
+              </span>
+              <span style={{ fontSize: 12, color: 'var(--accent-warm)', fontWeight: 500 }}>
+                {pending.length} 个方案
+              </span>
+            </>
+          ) : (
+            <>
+              <Loader2 size={16} style={{ animation: 'spin 1s linear infinite', color: 'var(--accent-violet)' }} />
+              <span style={{ fontSize: 14, color: 'var(--accent-violet)', fontWeight: 500 }}>
+                正在准备「{waitingLabel || '下一阶段'}」...
+              </span>
+            </>
           )}
         </div>
 
-        {/* AI reasoning (collapsible) */}
+        {/* 流式输出框 — 复用 streaming 阶段的样式 */}
         {displayText && (
-          <details style={{ marginBottom: 0 }}>
-            <summary style={{
-              fontSize: 12, color: 'var(--text-muted)', cursor: 'pointer',
-              padding: '6px 0', userSelect: 'none',
-            }}>
-              AI 推理过程（点击展开/收起）
-            </summary>
-            <div style={{
-              padding: 16, borderRadius: 10,
-              background: 'rgba(255,255,255,0.02)', border: '1px solid var(--glass-border)',
-              fontFamily: 'var(--font-mono)', fontSize: 12, lineHeight: 1.7,
-              color: 'var(--text-secondary)', whiteSpace: 'pre-wrap',
-              maxHeight: 260, overflowY: 'auto',
-              marginTop: 6,
-            }}>
-              {displayText}
-            </div>
-          </details>
+          <div style={{
+            height: 'calc(100vh - 400px)', minHeight: 280,
+            padding: 20, borderRadius: 12,
+            background: 'rgba(255,255,255,0.02)', border: '1px solid var(--glass-border)',
+            fontFamily: 'var(--font-mono)', fontSize: 13, lineHeight: 1.8,
+            color: 'var(--text-secondary)', whiteSpace: 'pre-wrap', overflowY: 'auto',
+          }}>
+            {displayText}
+          </div>
         )}
 
-        {/* Error display */}
+        {/* 错误提示 */}
         {hatchError && !pending.length && (
           <div style={{
             padding: '14px 18px', borderRadius: 10,
@@ -615,38 +624,6 @@ export default function HatchingView({ project, phase, proposals, engines, curre
             </button>
           </div>
         )}
-
-        {/* Action prompt */}
-        <div style={{
-          display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 10,
-          padding: '28px 20px', textAlign: 'center',
-          background: pending.length > 0
-            ? 'rgba(253,230,138,0.03)'
-            : 'rgba(196,181,253,0.03)',
-          borderRadius: 12,
-          border: pending.length > 0
-            ? '1px solid rgba(253,230,138,0.08)'
-            : '1px solid rgba(196,181,253,0.06)',
-        }}>
-          {pending.length > 0 ? (
-            <>
-              <Sparkles size={18} style={{ color: 'var(--accent-warm)' }} />
-              <p style={{ fontSize: 13, color: 'var(--text-secondary)', lineHeight: 1.6, maxWidth: 420 }}>
-                {pending.length} 个方案正在 <b style={{ color: 'var(--accent-warm)' }}>MOU 弹窗</b>中等待你的审批。
-                请选择最符合你设想的方案，或提出修改意见。
-              </p>
-            </>
-          ) : (
-            <>
-              <Loader2 size={16} style={{ animation: 'spin 1s linear infinite', color: hatchError ? 'var(--accent-rose)' : 'var(--accent-violet)' }} />
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
-                <p style={{ fontSize: 13, color: 'var(--text-secondary)', lineHeight: 1.6, maxWidth: 420 }}>
-                  AI 正在准备{waitingLabel ? `「${waitingLabel}」` : '下一阶段'}的设计，请稍候...
-                </p>
-              </div>
-            </>
-          )}
-        </div>
       </div>
     )
   }
