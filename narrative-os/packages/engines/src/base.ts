@@ -390,11 +390,11 @@ export abstract class Engine {
         if (endIdx !== -1) {
           const parsed = JSON.parse(cleaned.substring(startIdx, endIdx));
           const proposals = parsed.proposals || [];
-          // 至少需要 2 个提案才触发提前终止（避免只在输出第 1 个方案时就截断）
-          return proposals.length >= 2;
+          // 至少需要 3 个提案才触发提前终止（确保所有方案完整输出）
+          return proposals.length >= 3;
         }
       }
-      // 检查独立 JSON 格式：至少找到 2 个完整的 proposal JSON 对象才触发
+      // 检查独立 JSON 格式：至少找到 3 个完整的 proposal JSON 对象才触发
       const typeRegex = /\{\s*"type"\s*:\s*"/g;
       let match;
       let count = 0;
@@ -408,7 +408,7 @@ export abstract class Engine {
           } catch { /* skip */ }
         }
       }
-      return count >= 2;
+      return count >= 3;
     } catch {
       return false;
     }
