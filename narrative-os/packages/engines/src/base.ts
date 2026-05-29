@@ -313,17 +313,23 @@ export abstract class Engine {
     try {
       const cleaned = raw.replace(/```json\s*/g, "").replace(/```\s*/g, "").trim();
 
-      // 策略1：查找 {"proposals": [...]} 包裹格式
-      const proposalsMatch = cleaned.match(/\{\s*"proposals"\s*:\s*\[/);
-      if (proposalsMatch) {
-        const startIdx = proposalsMatch.index!;
+      // 策略1：查找所有 {"proposals": [...]} 包裹格式
+      // LLM 可能将每个方案输出为独立的 {"proposals":[...]} 块，需全部收集
+      const allProposals: Proposal[] = [];
+      const proposalsRegex = /\{\s*"proposals"\s*:\s*\[/g;
+      let pMatch;
+      while ((pMatch = proposalsRegex.exec(cleaned)) !== null && allProposals.length < maxProposals) {
+        const startIdx = pMatch.index;
         const endIdx = findJsonObjectEnd(cleaned, startIdx);
         if (endIdx !== -1) {
-          const json = cleaned.substring(startIdx, endIdx);
-          const proposals = JSON.parse(json).proposals || [];
-          return proposals.slice(0, maxProposals);
+          try {
+            const json = cleaned.substring(startIdx, endIdx);
+            const proposals = JSON.parse(json).proposals || [];
+            allProposals.push(...proposals);
+          } catch { /* 跳过无效 JSON 块 */ }
         }
       }
+      if (allProposals.length > 0) return allProposals.slice(0, maxProposals);
 
       // 策略2：LLM 输出了多个独立的 proposal JSON（文本与 JSON 混合）
       // 逐个提取包含 "type"、"title" 和 "content" 的完整 JSON 对象
@@ -382,18 +388,22 @@ export abstract class Engine {
   protected _hasCompleteProposals(raw: string): boolean {
     try {
       const cleaned = raw.replace(/```json\s*/g, "").replace(/```\s*/g, "").trim();
-      // 优先检查包裹格式 {"proposals": [...]}
-      const proposalsMatch = cleaned.match(/\{\s*"proposals"\s*:\s*\[/);
-      if (proposalsMatch) {
-        const startIdx = proposalsMatch.index!;
+      // 检查包裹格式：收集所有 {"proposals": [...]} 块中的提案
+      const allProposals: unknown[] = [];
+      const proposalsRegex = /\{\s*"proposals"\s*:\s*\[/g;
+      let pMatch;
+      while ((pMatch = proposalsRegex.exec(cleaned)) !== null) {
+        const startIdx = pMatch.index;
         const endIdx = findJsonObjectEnd(cleaned, startIdx);
         if (endIdx !== -1) {
-          const parsed = JSON.parse(cleaned.substring(startIdx, endIdx));
-          const proposals = parsed.proposals || [];
-          // 至少需要 3 个提案才触发提前终止（确保所有方案完整输出）
-          return proposals.length >= 3;
+          try {
+            const parsed = JSON.parse(cleaned.substring(startIdx, endIdx));
+            const proposals = parsed.proposals || [];
+            allProposals.push(...proposals);
+          } catch { /* skip */ }
         }
       }
+      if (allProposals.length >= 3) return true;
       // 检查独立 JSON 格式：至少找到 3 个完整的 proposal JSON 对象才触发
       const typeRegex = /\{\s*"type"\s*:\s*"/g;
       let match;

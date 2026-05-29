@@ -242,61 +242,42 @@ ${refScaleList}
 
 ## 输出格式
 **绝对禁止在 JSON 之外输出任何文字。所有描述、分析、解释都必须放在 content.reasoning 字段中。**
-**直接输出一个完整的 JSON 对象，以 { 开头，以 } 结尾。**
+**直接输出一个完整的 JSON 对象，以 { 开头，以 } 结尾。所有 3 个方案必须放在同一个 proposals 数组中。**
 
 {
-  "proposals": [{
-    "type": "geography",
-    "title": "简洁概括方案核心特征的标题",
-    "content": {
-      "reasoning": "必须包含以下论证：\\n1. 为什么第 1 级是全局世界框架？这个世界观还有哪些可能的空间类型没在简介中出现但应该存在？\\n2. 每一级的粒度边界是什么？举例说明这一级的典型空间单元有多大\\n3. 顶层空间域的命名为什么是纯地名而非标签组合？\\n4. 整体尺度链如何为故事留足空间纵深？至少 200 字。",
-      "payload": {
-        "name": "世界地理名称",
-        "scales": [
-          {
-            "key": "scale_key",
-            "label": "中文标签",
-            "parentKey": null,
-            "sortOrder": 0,
-            "description": "正式粒度定义：空间规模、典型单元、与上下级关系"
-          },
-          {
-            "key": "next_scale",
-            "label": "中文标签",
-            "parentKey": "scale_key",
-            "sortOrder": 1,
-            "description": "正式粒度定义"
-          },
-          {
-            "key": "scene",
-            "label": "场景",
-            "parentKey": "pre_last",
-            "sortOrder": 2,
-            "description": "具体场景：角色可活动的具体场所，如广场、密室、修炼室"
-          }
-        ],
-        "items": [
-          {
-            "subtype": "region",
-            "name": "纯地名（不加前缀）",
-            "summary": "一句话概括核心特征和在故事中的定位",
-            "content": {
-              "scale": "（第一级尺度的 key）",
-              "coordinates": { "x": 500, "y": 400 },
-              "climate": "整体气候特征",
-              "terrain": "整体地形特征",
-              "resources": "核心资源",
-              "cultural_significance": "在故事中的定位",
-              "needs_refinement": true
-            }
-          }
-        ],
-        "relations": [
-          { "sourceName": "空间域A", "targetName": "空间域B", "relationType": "adjacency", "label": "相邻关系" }
-        ]
+  "proposals": [
+    {
+      "type": "geography",
+      "title": "方案一：简洁概括核心特征",
+      "content": {
+        "reasoning": "必须包含以下论证：\\n1. 为什么第 1 级是全局世界框架？这个世界观还有哪些可能的空间类型没在简介中出现但应该存在？\\n2. 每一级的粒度边界是什么？举例说明这一级的典型空间单元有多大\\n3. 顶层空间域的命名为什么是纯地名而非标签组合？\\n4. 整体尺度链如何为故事留足空间纵深？至少 200 字。",
+        "payload": {
+          "name": "世界地理名称",
+          "scales": [
+            { "key": "scale_key", "label": "中文标签", "parentKey": null, "sortOrder": 0, "description": "正式粒度定义" },
+            { "key": "next_scale", "label": "中文标签", "parentKey": "scale_key", "sortOrder": 1, "description": "正式粒度定义" },
+            { "key": "scene", "label": "场景", "parentKey": "pre_last", "sortOrder": 2, "description": "具体场景" }
+          ],
+          "items": [
+            { "subtype": "region", "name": "纯地名（不加前缀）", "summary": "一句话概括", "content": { "scale": "（第一级尺度的 key）", "coordinates": { "x": 500, "y": 400 }, "climate": "气候", "terrain": "地形", "resources": "资源", "cultural_significance": "定位", "needs_refinement": true } }
+          ],
+          "relations": [
+            { "sourceName": "空间域A", "targetName": "空间域B", "relationType": "adjacency", "label": "相邻关系" }
+          ]
+        }
       }
+    },
+    {
+      "type": "geography",
+      "title": "方案二：...",
+      "content": { "reasoning": "...", "payload": { ... } }
+    },
+    {
+      "type": "geography",
+      "title": "方案三：...",
+      "content": { "reasoning": "...", "payload": { ... } }
     }
-  }]
+  ]
 }
 
 ## 铁律
@@ -370,6 +351,15 @@ ${siblingSection}
 - **太小**：如果子条目只相当于下一级「${childLabelForHint}」的大小，说明粒度偏小，应该合并
 - **合适**：子条目是父条目的合理细分，每个子条目内部还有进一步细化的空间
 
+## 尺度语义对齐（关键提醒）
+你产出的子条目必须对齐「${targetLabel}」这一层级的**语义本质**，不能只是机械地将父条目切成小块。
+
+- 如果「${targetLabel}」的定义是"按存在形态划分的宏观维度层"，子条目应该是不同的存在形态维度（如物质界层、灵界层、虚空间），而不是城市的内部区域
+- 如果「${targetLabel}」的定义是"大型行政/地理区域"，子条目应该是省级/大区级的空间单元，而不是城市功能区
+- 如果「${targetLabel}」的定义是"城市聚落"，子条目应该是城市/城镇级别的空间单元
+- **判断标准**：每个子条目的空间规模必须与「${targetLabel}」粒度定义中的"典型单元"一致。如果定义说"典型单元是一个省份"，那你产出的每个子条目就应该是一个省份级别的空间
+- **反例**：父条目是"冥阳世界体系"，目标是"维度界域"（定义为"按存在形态划分的宏观维度层"），你不应该产出"滨江地表""雾隐回廊"这种城市内部层级——而应该产出"阳间物质维度""阴间幽冥维度""灵界夹层"这类宏观维度
+
 ## 地理命名规范（必须遵守）
 - 空间域名必须是**纯地名**，像真实世界中的正式地名
 - **禁止**加前缀标签：❌ 炽阳高地区·主教学楼群、❌ 至阴禁区·旧殡仪馆遗址
@@ -386,38 +376,38 @@ ${siblingSection}
 - 子条目之间应有合理的空间分布，避免重叠
 
 ## 输出格式
+**绝对禁止在 JSON 之外输出任何文字。所有描述、分析、解释都必须放在 content.reasoning 字段中。**
+**直接输出一个完整的 JSON 对象，以 { 开头，以 } 结尾。所有 3 个方案必须放在同一个 proposals 数组中。**
+
 {
-  "proposals": [{
-    "type": "geography",
-    "title": "「${ref.parentName}」的${targetLabel}细化方案",
-    "content": {
-      "reasoning": "为什么这样划分「${ref.parentName}」的内部结构？各区域的核心差异？粒度是否对齐「${targetLabel}」的定义？命名为什么是纯地名？",
-      "payload": {
-        "name": "${ref.parentName}·${targetLabel}划分",
-        "items": [
-          {
-            "subtype": "region",
-            "name": "纯地名（不加前缀）",
-            "summary": "一句话概括",
-            "content": {
-              "scale": "${targetScale}",
-              "coordinates": { "x": 480, "y": 120 },
-              "parentName": "${ref.parentName}",
-              "climate": "气候",
-              "terrain": "地形",
-              "resources": "资源",
-              "cultural_significance": "在故事中的定位",
-              "needs_refinement": true
-            }
-          }
-        ],
-        "relations": [
-          { "sourceName": "子区域A", "targetName": "${ref.parentName}", "relationType": "geographic", "label": "位于" },
-          { "sourceName": "子区域A", "targetName": "子区域B", "relationType": "adjacency", "label": "相邻" }
-        ]
+  "proposals": [
+    {
+      "type": "geography",
+      "title": "「${ref.parentName}」的${targetLabel}细化方案一",
+      "content": {
+        "reasoning": "为什么这样划分？各区域的核心差异？粒度是否对齐「${targetLabel}」的定义？命名为什么是纯地名？",
+        "payload": {
+          "name": "${ref.parentName}·${targetLabel}划分",
+          "items": [
+            { "subtype": "region", "name": "纯地名", "summary": "一句话概括", "content": { "scale": "${targetScale}", "coordinates": { "x": 480, "y": 120 }, "parentName": "${ref.parentName}", "climate": "气候", "terrain": "地形", "resources": "资源", "cultural_significance": "定位", "needs_refinement": true } }
+          ],
+          "relations": [
+            { "sourceName": "子区域A", "targetName": "${ref.parentName}", "relationType": "geographic", "label": "位于" }
+          ]
+        }
       }
+    },
+    {
+      "type": "geography",
+      "title": "「${ref.parentName}」的${targetLabel}细化方案二",
+      "content": { "reasoning": "...", "payload": { ... } }
+    },
+    {
+      "type": "geography",
+      "title": "「${ref.parentName}」的${targetLabel}细化方案三",
+      "content": { "reasoning": "...", "payload": { ... } }
     }
-  }]
+  ]
 }
 
 ## 设计原则
