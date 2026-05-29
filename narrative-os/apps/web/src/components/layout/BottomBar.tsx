@@ -18,21 +18,20 @@ export default function BottomBar({ onOpenProposalList }: {
   const refinementContext = useHatchStore((s) => s._refinementContext)
   const companionStreaming = useCompanionStore((s) => s.isStreaming)
 
-  const flowState = useMemo<'IDLE' | 'AI_PROCESSING' | 'REVIEWING' | 'EXECUTING' | 'WORLD_DONE'>(() => {
-    if (companionStreaming || phase === 'streaming') return 'AI_PROCESSING'
+  const pendingCount = proposals.filter((p) => p.status === 'pending').length
+  // WAITING 阶段细分：有引擎在跑但无待审批提案 = 实际在执行
+  const isExecutingInWaiting = phase === 'waiting' && currentEngine && pendingCount === 0
+
+  const flowState = useMemo<'IDLE' | 'AI_PROCESSING' | 'REVIEWING' | 'WORLD_DONE'>(() => {
+    if (companionStreaming || phase === 'streaming' || isExecutingInWaiting) return 'AI_PROCESSING'
     if (phase === 'waiting' || phase === 'waiting_phase_confirmation') return 'REVIEWING'
     if (phase === 'world_complete') return 'WORLD_DONE'
-    const hasExecuting = proposals.some((p) => p.status === 'approved')
-    if (hasExecuting && phase === 'idle') return 'EXECUTING'
     return 'IDLE'
-  }, [phase, companionStreaming, proposals])
-
-  const pendingCount = proposals.filter((p) => p.status === 'pending').length
+  }, [phase, companionStreaming, isExecutingInWaiting])
 
   const flowColors: Record<string, { color: string; glow: string }> = {
     AI_PROCESSING: { color: 'var(--accent-violet)', glow: 'rgba(196,181,253,0.6)' },
     REVIEWING: { color: 'var(--accent-warm)', glow: 'rgba(253,230,138,0.5)' },
-    EXECUTING: { color: 'var(--accent-mint)', glow: 'rgba(110,231,183,0.5)' },
     WORLD_DONE: { color: 'var(--accent-mint)', glow: 'rgba(134,239,172,0.5)' },
     IDLE: { color: 'var(--text-muted)', glow: 'rgba(255,255,255,0.2)' },
   }
@@ -61,10 +60,10 @@ export default function BottomBar({ onOpenProposalList }: {
           '--glow-color': fc.glow,
           animation: flowState !== 'IDLE' ? 'breathGlow 2s ease-in-out infinite' : 'none',
         } as React.CSSProperties}>
-          {flowState === 'IDLE' ? 'IDLE'
-            : flowState === 'AI_PROCESSING' ? 'PROC'
-            : flowState === 'REVIEWING' ? 'REVIEW'
-            : 'EXEC'}
+          {flowState === 'IDLE' ? '空闲'
+            : flowState === 'AI_PROCESSING' ? '生成中'
+            : flowState === 'REVIEWING' ? '待审'
+            : '完成'}
         </span>
       </div>
 
@@ -87,15 +86,16 @@ export default function BottomBar({ onOpenProposalList }: {
         <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
           <div style={{
             width: 5, height: 5, borderRadius: '50%',
-            background: phase === 'streaming' ? 'var(--accent-warm)' : 'var(--text-muted)',
-            animation: phase === 'streaming' ? 'pulse 1.5s ease-in-out infinite' : undefined,
+            background: (phase === 'streaming' || isExecutingInWaiting) ? 'var(--accent-warm)' : 'var(--text-muted)',
+            animation: (phase === 'streaming' || isExecutingInWaiting) ? 'pulse 1.5s ease-in-out infinite' : undefined,
           }} />
           <span style={{ fontWeight: 500, color: 'var(--text-secondary)' }}>
-            {phase === 'streaming' ? (currentEngine ? `生成:${getEngineDisplayLabel(currentEngine, refinementContext)}` : 'GEN')
-              : phase === 'waiting' ? (currentEngine ? `等待:${getEngineDisplayLabel(currentEngine, refinementContext)}` : 'WAIT')
-              : phase === 'waiting_phase_confirmation' ? 'PHASE_CONFIRM'
-              : phase === 'world_complete' ? 'WORLD_DONE'
-              : 'IDLE'}
+            {phase === 'streaming' || isExecutingInWaiting
+              ? (currentEngine ? `生成:${getEngineDisplayLabel(currentEngine, refinementContext)}` : '生成中')
+              : phase === 'waiting' ? (currentEngine ? `等待:${getEngineDisplayLabel(currentEngine, refinementContext)}` : '等待中')
+              : phase === 'waiting_phase_confirmation' ? '待确认'
+              : phase === 'world_complete' ? '世界完成'
+              : '空闲'}
           </span>
         </div>
         <span style={{ width: 1, height: 12, background: 'var(--glass-border)' }} />

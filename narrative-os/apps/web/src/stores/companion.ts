@@ -30,6 +30,7 @@ interface CompanionStore {
   activityColor: string
   initActivityLoaded: boolean
   _activityProjectId: string | null
+  _activityLoading: boolean
 
   sendMessage: (projectId: string, content: string) => Promise<void>
   fetchInitActivity: (projectId: string) => Promise<void>
@@ -71,6 +72,7 @@ export const useCompanionStore = create<CompanionStore>((set, get) => ({
   activityColor: 'var(--text-muted)',
   initActivityLoaded: false,
   _activityProjectId: null,
+  _activityLoading: false,
 
   abort: () => {
     const controller = get()._abortController
@@ -259,8 +261,9 @@ export const useCompanionStore = create<CompanionStore>((set, get) => ({
   },
 
   fetchInitActivity: async (projectId) => {
-    // 切换项目时立即清空旧状态，避免跨项目残留
-    set({ _activityProjectId: projectId, initActivityLoaded: false, activityText: '', activityColor: 'var(--text-muted)' })
+    // 同一项目的重复请求直接跳过（React StrictMode / 多组件触发）
+    if (get()._activityLoading && get()._activityProjectId === projectId) return
+    set({ _activityProjectId: projectId, _activityLoading: true, initActivityLoaded: false, activityText: '', activityColor: 'var(--text-muted)' })
     try {
       const res = await fetch(`/api/companion/${projectId}/activity-init`, { method: 'POST' })
       if (get()._activityProjectId !== projectId) return
@@ -270,7 +273,8 @@ export const useCompanionStore = create<CompanionStore>((set, get) => ({
       }
     } catch {
       if (get()._activityProjectId !== projectId) return
-      // 网络错误时静默处理，保留默认空状态
+    } finally {
+      set({ _activityLoading: false })
     }
   },
 

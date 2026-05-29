@@ -10,7 +10,7 @@ import type { Project } from '../stores/projects'
 import type { Proposal, SettingItem } from '../stores/hatch'
 
 import { typeLabels } from '../utils/entityConfig'
-import { engineLabelMap } from '../utils/engineConfig'
+import { engineLabelMap, getEngineDisplayLabel } from '../utils/engineConfig'
 
 import AppLayout from '../components/layout/AppLayout'
 import WorldPanel from '../components/world/WorldPanel'
@@ -546,7 +546,7 @@ export default function ProjectEditor() {
       onReject={handleReject}
       onRevise={handleRevise}
       onDiscuss={handleDiscuss}
-      stageTitle={mouProposal ? `${engineLabelMap[mouProposal.sourceNode] || mouProposal.sourceNode || 'MOU'} - 方案选择` : undefined}
+      stageTitle={mouProposal ? `${getEngineDisplayLabel(mouProposal.sourceNode)} - 方案选择` : undefined}
       error={hatchError}
     />
     </>

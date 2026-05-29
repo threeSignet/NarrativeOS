@@ -742,13 +742,6 @@ app.post("/proposals/:id/approve", async (c) => {
         .from(aiProposals)
         .where(eq(aiProposals.id, proposalId));
 
-      // 审批世界观基调提案时，同步更新项目标题
-      if (proposal?.projectId && (proposal.type === 'tone' || proposal.sourceNode === 'tone') && proposal.title) {
-        await db.update(projects)
-          .set({ title: proposal.title, updatedAt: new Date() })
-          .where(eq(projects.id, proposal.projectId));
-      }
-
       if (proposal?.projectId && scheduler) {
         scheduler.onProposalsResolved(proposal.projectId).catch((err: Error) => {
           console.error(`[approve] auto-advance failed for ${proposal.projectId}:`, err.message);

@@ -909,7 +909,36 @@ export class EngineScheduler {
       };
 
       console.log(`[scheduler] Running refinement: ${engineName} for ${refinement.parentName} → ${refinement.targetScale}`);
-      const result = await node.run(ctx);
+
+      // 使用 streamRun 获取流式输出，与 runSingleEngine 保持一致
+      let result: import("@narrative-os/engines").EngineResult | undefined;
+      for await (const event of node.streamRun(ctx)) {
+        if (event.type === "chunk") {
+          this.emit({ type: "engine_chunk", projectId, node: `${engineName}:refine`, payload: { text: event.text, engine: `${engineName}:refine` } });
+        } else if (event.type === "model") {
+          this.emit({ type: "engine_model", projectId, node: `${engineName}:refine`, payload: { engine: `${engineName}:refine`, ...event.info } });
+        } else if (event.type === "usage") {
+          this.emit({ type: "engine_usage", projectId, node: `${engineName}:refine`, payload: { engine: `${engineName}:refine`, ...event.usage } });
+        } else if (event.type === "error") {
+          this.emit({ type: "engine_error", projectId, node: `${engineName}:refine`, error: event.message, payload: { engine: `${engineName}:refine`, message: event.message } });
+        } else if (event.type === "tool_call") {
+          this.emit({ type: "engine_tool_call", projectId, node: `${engineName}:refine`, payload: { engine: `${engineName}:refine`, toolCallId: event.toolCallId, toolName: event.toolName } });
+        } else if (event.type === "tool_result") {
+          this.emit({ type: "engine_tool_result", projectId, node: `${engineName}:refine`, payload: { engine: `${engineName}:refine`, toolCallId: event.toolCallId } });
+        } else if ((event as any).type === "generation") {
+          this.emit({ type: "engine_generation_start", projectId, node: `${engineName}:refine`, payload: { engine: `${engineName}:refine`, start: true } });
+        } else if (event.type === "done") {
+          result = event.result;
+        }
+      }
+
+      if (!result) {
+        const msg = "细化引擎未返回结果";
+        console.error(`[scheduler] ${engineName}:refine: ${msg}`);
+        this.emit({ type: "engine_error", projectId, node: `${engineName}:refine`, error: msg });
+        return [];
+      }
+
       console.log(`[scheduler] Refinement completed, proposals: ${result.proposals.length}`);
 
       let proposalIds: string[] = [];

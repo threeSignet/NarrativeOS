@@ -1,6 +1,7 @@
 {
   "name": "@narrative-os/server",
   "version": "0.1.0",
+  "dotenv": { "path": "../../.env" },
   "scripts": {
     "dev": "tsx watch src/index.ts"
   },

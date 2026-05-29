@@ -95,7 +95,6 @@ export default function LLMStatusPopup() {
   useClickOutside(configRef, () => setShowConfig(false), showConfig)
 
   const activeJobs = Object.values(activeLLMJobs).filter((j): j is ActiveLLMJob => j.active)
-  const doneJobs = Object.values(activeLLMJobs).filter((j): j is ActiveLLMJob => !j.active)
 
   // Derived display values
   const provider = llmStatus?.provider || DEFAULT_PROVIDER
@@ -165,22 +164,6 @@ export default function LLMStatusPopup() {
                 </div>
               </div>
             ))}
-            {doneJobs.length > 0 && (
-              <>
-                <div style={{ padding: '8px 12px 4px', borderTop: '1px solid rgba(255,255,255,0.06)', fontSize: 11, fontWeight: 600, color: 'var(--text-muted)', letterSpacing: '0.05em' }}>已完成</div>
-                {doneJobs.map((job) => (
-                  <div key={job.jobId} style={{ padding: '6px 12px', display: 'flex', flexDirection: 'column', gap: 2 }}>
-                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                      <span style={{ fontSize: 11, color: 'var(--text-secondary)' }}>{job.jobLabel}</span>
-                      <span style={{ fontSize: 10, color: 'var(--accent-mint)' }}>完成</span>
-                    </div>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 10, color: 'var(--text-muted)', fontFamily: 'var(--font-mono)' }}>
-                      <span>∑ {job.totalTokens.toLocaleString()}</span>
-                    </div>
-                  </div>
-                ))}
-              </>
-            )}
           </div>
         )}
       </div>

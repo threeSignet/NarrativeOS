@@ -235,7 +235,12 @@ export const useHatchStore = create<HatchStore>((set, get) => ({
   updateLLMJob: (jobId, partial) => {
     const jobs = { ...get().activeLLMJobs }
     if (!jobs[jobId]) return
-    jobs[jobId] = { ...jobs[jobId], ...partial }
+    // 任务结束时直接删除，避免残留已完成条目
+    if (partial.active === false) {
+      delete jobs[jobId]
+    } else {
+      jobs[jobId] = { ...jobs[jobId], ...partial }
+    }
     set({ activeLLMJobs: jobs, llmStatus: aggregateLLMStatus(jobs) })
   },
 
@@ -308,11 +313,11 @@ export const useHatchStore = create<HatchStore>((set, get) => ({
           ([id]) => !id.endsWith(':ws')
         )?.[0]
         const jobId = existingJobId || `engine:${engine}:ws`
+        // 只更新 token，不设 active:false——删除由 engine_done 统一处理
         get().updateLLMJob(jobId, {
           promptTokens: (payload.promptTokens as number) ?? 0,
           completionTokens: (payload.completionTokens as number) ?? 0,
           totalTokens: (payload.totalTokens as number) ?? 0,
-          active: false,
         })
         break
       }
@@ -403,11 +408,12 @@ export const useHatchStore = create<HatchStore>((set, get) => ({
           })
         },
         onUsage: (parsed) => {
+          // 只更新 token 数据，不触发 active:false——
+          // 删除由 onDone / engine_done 统一处理，避免 WS 提前删除导致 SSE chunk 无法估算 token
           get().updateLLMJob(jobId, {
             promptTokens: parsed.promptTokens ?? 0,
             completionTokens: parsed.completionTokens ?? 0,
             totalTokens: parsed.totalTokens ?? 0,
-            active: false,
           })
         },
         onChunk: (text) => {
@@ -682,11 +688,11 @@ export const useHatchStore = create<HatchStore>((set, get) => ({
           })
         },
         _onUsage: (usage) => {
+          // 只更新 token，删除由 onDone 统一处理
           get().updateLLMJob(jobId, {
             promptTokens: usage.promptTokens ?? 0,
             completionTokens: usage.completionTokens ?? 0,
             totalTokens: usage.totalTokens ?? 0,
-            active: false,
           })
         },
       })

@@ -57,18 +57,27 @@ function computePipeline(
     proposals.filter((p) => p.status === 'pending').map((p) => p.sourceNode),
   )
 
+  // 判断当前引擎是否匹配指定引擎（支持细化引擎如 geography:refine 匹配 geography）
+  const isEngineRunning = (engineName: string): boolean => {
+    if (!currentEngine) return false
+    if (currentEngine === engineName) return true
+    // 细化引擎格式：baseEngine:refine，匹配主引擎
+    if (currentEngine.includes(':refine') && currentEngine.startsWith(engineName + ':')) return true
+    return false
+  }
+
   // 使用 engines 数组（已按拓扑序排列），过滤当前 hatchGroup
   return engines
     .filter((e) => e.group === hatchGroup)
     .map((e) => {
       const itemCount = e.itemCount || 0
       if (hatchGroup === 'world') {
-        if (currentEngine === e.name) return { key: e.type, node: e.name, label: e.label, group: e.group, status: 'running' as const, itemCount }
+        if (isEngineRunning(e.name)) return { key: e.type, node: e.name, label: e.label, group: e.group, status: 'running' as const, itemCount }
         if (e.hasPending || pendingSources.has(e.name)) return { key: e.type, node: e.name, label: e.label, group: e.group, status: 'waiting_approval' as const, itemCount }
         if (e.hasData) return { key: e.type, node: e.name, label: e.label, group: e.group, status: 'completed' as const, itemCount }
         return { key: e.type, node: e.name, label: e.label, group: e.group, status: 'pending' as const, itemCount }
       } else {
-        if (currentEngine === e.name) return { key: e.type, node: e.name, label: e.label, group: e.group, status: 'running' as const, itemCount }
+        if (isEngineRunning(e.name)) return { key: e.type, node: e.name, label: e.label, group: e.group, status: 'running' as const, itemCount }
         if (pendingSources.has(e.name)) return { key: e.type, node: e.name, label: e.label, group: e.group, status: 'waiting_approval' as const, itemCount }
         if (approvedSources.has(e.name)) return { key: e.type, node: e.name, label: e.label, group: e.group, status: 'completed' as const, itemCount }
         return { key: e.type, node: e.name, label: e.label, group: e.group, status: 'pending' as const, itemCount }
@@ -401,7 +410,7 @@ export default function HatchingView({ project, phase, proposals, engines, curre
     // ── IDLE with history（已开始但中断，如服务重启）── 显示继续推进按钮
     if (phase === 'idle' && proposals.length > 0) {
       const nextPending = pipeline.find((s) => s.status === 'pending')
-      const nextLabel = nextPending ? (engineLabelMap[nextPending.node] || nextPending.label) : null
+      const nextLabel = nextPending ? getEngineDisplayLabel(nextPending.node) : null
       return (
         <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 24, padding: '48px 20px', textAlign: 'center' }}>
           <p style={{ fontSize: 14, color: 'var(--text-secondary)', lineHeight: 1.7, maxWidth: 420 }}>
@@ -525,7 +534,7 @@ export default function HatchingView({ project, phase, proposals, engines, curre
               boxShadow: '0 0 8px var(--accent-warm)',
             }} />
             <span style={{ fontSize: 14, color: 'var(--text-primary)', fontWeight: 500 }}>
-              「{engineLabelMap[phaseConfirmationTarget || ''] || phaseConfirmationTarget || '...'}」阶段完成，等待确认
+              「{getEngineDisplayLabel(phaseConfirmationTarget || null)}」阶段完成，等待确认
             </span>
           </div>
 
@@ -563,8 +572,14 @@ export default function HatchingView({ project, phase, proposals, engines, curre
     }
 
     // ── WAITING ──
+    // 优先使用 currentEngine（细化/执行中的引擎），其次是等待审批的引擎
     const waitingEngine = currentEngine || pipeline.find((s) => s.status === 'waiting_approval')?.node || null
-    const waitingLabel = waitingEngine ? (engineLabelMap[waitingEngine] || waitingEngine) : null
+    // 使用 getEngineDisplayLabel 获取友好标签，支持细化引擎的中文显示
+    const waitingLabel = waitingEngine
+      ? getEngineDisplayLabel(waitingEngine, refinementContext)
+      : null
+    // 查找当前正在运行的 pipeline 步骤（用于显示执行中状态）
+    const runningStep = pipeline.find((s) => s.status === 'running')
 
     return (
       <div style={{ display: 'flex', flexDirection: 'column', gap: 16, padding: '20px 0' }}>
@@ -584,11 +599,20 @@ export default function HatchingView({ project, phase, proposals, engines, curre
                 {pending.length} 个方案
               </span>
             </>
+          ) : runningStep ? (
+            <>
+              <Loader2 size={16} style={{ animation: 'spin 1s linear infinite', color: 'var(--accent-violet)' }} />
+              <span style={{ fontSize: 14, color: 'var(--accent-violet)', fontWeight: 500 }}>
+                {waitingLabel
+                  ? `正在执行：${waitingLabel}`
+                  : `正在执行「${runningStep.label}」...`}
+              </span>
+            </>
           ) : (
             <>
               <Loader2 size={16} style={{ animation: 'spin 1s linear infinite', color: 'var(--accent-violet)' }} />
               <span style={{ fontSize: 14, color: 'var(--accent-violet)', fontWeight: 500 }}>
-                正在准备「{waitingLabel || '下一阶段'}」...
+                正在准备下一阶段...
               </span>
             </>
           )}
