@@ -257,6 +257,10 @@ export const projects = pgTable(
     outlineFile: text("outline_file"),
     manuscriptPath: text("manuscript_path"),
 
+    // ── v4.0 创作意图注入系统 ──
+    creationCharter: jsonb("creation_charter"),
+    collaborationMode: text("collaboration_mode").default("auto"),
+
     // ── 已有字段（向后兼容） ──
     genreContract: jsonb("genre_contract"),
     worldBible: jsonb("world_bible"),
@@ -290,6 +294,7 @@ export const projects = pgTable(
     defaultWritingStyleCheck: check("projects_writing_style_check", inCheck(table.defaultWritingStyle, [...WRITING_STYLE_VALUES, ""])),
     defaultPaceCheck: check("projects_pace_check", inCheck(table.defaultPace, PACE_VALUES)),
     syncModeCheck: check("projects_sync_mode_check", inCheck(table.syncMode, SYNC_MODE_VALUES)),
+    collaborationModeCheck: check("projects_collaboration_mode_check", inCheck(table.collaborationMode, ["plan", "auto", "full_auto", ""])),
   })
 );
 
@@ -880,5 +885,87 @@ export const settingItemVersions = pgTable(
   },
   (table) => ({
     itemIdx: index("siv_item_idx").on(table.settingItemId, table.version),
+  })
+);
+
+// ============================================================================
+// v4.0 新增表：地理锚点
+// ============================================================================
+export const geoAnchors = pgTable(
+  "geo_anchors",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    projectId: uuid("project_id").notNull().references(() => projects.id),
+    settingItemId: uuid("setting_item_id").notNull().references(() => settingItems.id),
+    scaleLevel: text("scale_level").notNull(),
+    parentLocationId: uuid("parent_location_id").references(() => settingItems.id),
+    relativePosition: text("relative_position"),
+    coordinates: jsonb("coordinates"),
+    createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
+  },
+  (table) => ({
+    projectIdx: index("geo_anchors_project_idx").on(table.projectId),
+    itemIdx: index("geo_anchors_item_idx").on(table.settingItemId),
+    parentIdx: index("geo_anchors_parent_idx").on(table.parentLocationId),
+  })
+);
+
+// ============================================================================
+// v4.0 新增表：设定条目变更追踪
+// ============================================================================
+const CHANGE_SOURCE_TYPE_VALUES = [
+  "chapter_commit", "manual_edit", "proposal_approval", "retcon", "refinement",
+] as const;
+
+export const settingItemChanges = pgTable(
+  "setting_item_changes",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    projectId: uuid("project_id").notNull().references(() => projects.id),
+    settingItemId: uuid("setting_item_id").notNull().references(() => settingItems.id),
+    sourceType: text("source_type", { enum: ["chapter_commit", "manual_edit", "proposal_approval", "retcon", "refinement"] }).notNull(),
+    sourceId: uuid("source_id"),
+    fieldPath: text("field_path").notNull(),
+    oldValue: jsonb("old_value"),
+    newValue: jsonb("new_value"),
+    chapterNumber: integer("chapter_number"),
+    effectiveAt: timestamp("effective_at", { withTimezone: true }),
+    changeReason: text("change_reason"),
+    changedBy: text("changed_by").default("system"),
+    createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+  },
+  (table) => ({
+    projectItemIdx: index("sic_project_item_idx").on(table.projectId, table.settingItemId),
+    chapterIdx: index("sic_chapter_idx").on(table.chapterNumber),
+    createdIdx: index("sic_created_idx").on(table.createdAt),
+    sourceTypeCheck: check("sic_source_type_check", inCheck(table.sourceType, CHANGE_SOURCE_TYPE_VALUES)),
+  })
+);
+
+// ============================================================================
+// v4.0 新增表：世界引擎快照
+// ============================================================================
+const SNAPSHOT_TYPE_VALUES = ["chapter_commit", "manual", "pre_retcon", "pre_refine"] as const;
+
+export const worldSnapshots = pgTable(
+  "world_snapshots",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    projectId: uuid("project_id").notNull().references(() => projects.id),
+    chapterId: uuid("chapter_id").references(() => chapters.id),
+    snapshotType: text("snapshot_type", { enum: ["chapter_commit", "manual", "pre_retcon", "pre_refine"] }).notNull().default("chapter_commit"),
+    snapshotData: jsonb("snapshot_data").notNull(),
+    itemCount: integer("item_count").notNull().default(0),
+    relationCount: integer("relation_count").notNull().default(0),
+    scaleLevels: jsonb("scale_levels"),
+    createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+    createdBy: text("created_by").default("system"),
+  },
+  (table) => ({
+    projectIdx: index("ws_project_idx").on(table.projectId),
+    chapterIdx: index("ws_chapter_idx").on(table.chapterId),
+    createdIdx: index("ws_created_idx").on(table.createdAt),
+    snapshotTypeCheck: check("ws_snapshot_type_check", inCheck(table.snapshotType, SNAPSHOT_TYPE_VALUES)),
   })
 );

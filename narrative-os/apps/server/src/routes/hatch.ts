@@ -150,6 +150,7 @@ async function executeEngineSSEStream(
         title: p.title,
         status: p.status,
         reasoning: (p.content as any)?.reasoning,
+        optionGroup: p.optionGroup,
       })),
     };
     safeWrite(`event: done\ndata: ${JSON.stringify(donePayload)}\n\n`);
@@ -263,7 +264,7 @@ app.post("/hatch/:id/advance", async (c) => {
       return;
     }
 
-    // ── 待运行引擎 → SSE 流式 ──
+    // ── 待运行引擎 → SSE 流式（含细化模式）──
     if (phaseInfo.phase === "engine_ready" && phaseInfo.engine) {
       // 工作室引擎（大纲/卷纲/章纲/写作）：有专门的 SSE 端点和前端路由
       // 发送 handoff 事件让前端用 outline store 接管
@@ -278,24 +279,17 @@ app.post("/hatch/:id/advance", async (c) => {
         releaseLock();
         return;
       }
-      await executeEngineSSEStream(s as any, projectId, phaseInfo.engine!, project);
-      releaseLock();
-      return;
-    }
-
-    // ── 等待用户操作（有待细化条目，需手动触发）──
-    if (phaseInfo.phase === "waiting_user_action" && phaseInfo.refinement) {
-      safeWrite(`event: phase\ndata: ${JSON.stringify({
-        phase: "waiting_user_action",
-        refinableCount: phaseInfo.refinableCount,
-        nextRefinable: {
-          name: phaseInfo.refinement.parentName,
-          scale: phaseInfo.refinement.parentScale,
-          targetScale: phaseInfo.refinement.targetScale,
-        },
-        message: `有 ${phaseInfo.refinableCount} 个条目待细化，请在地图视图中点击「细化此区域」手动触发`,
-      })}\n\n`);
-      safeWrite(`event: done\ndata: ${JSON.stringify({ success: true })}\n\n`);
+      // 细化模式：getNextPhase 返回 refinement 时，传入细化上下文
+      const refinement = phaseInfo.refinement
+        ? {
+            parentItemId: phaseInfo.refinement.parentItemId,
+            parentName: phaseInfo.refinement.parentName,
+            parentScale: phaseInfo.refinement.parentScale,
+            targetScale: phaseInfo.refinement.targetScale,
+            depth: phaseInfo.refinement.depth,
+          }
+        : undefined;
+      await executeEngineSSEStream(s as any, projectId, phaseInfo.engine!, project, { refinement });
       releaseLock();
       return;
     }
@@ -796,6 +790,43 @@ app.post("/proposals/:id/revise", async (c) => {
     proposalId,
     projectId: result.projectId,
     status: "revision_requested",
+  });
+});
+
+/**
+ * GET /proposals/:id/group
+ * 获取同一 optionGroup 的所有 pending 提案（多方案选择用）
+ */
+app.get("/proposals/:id/group", async (c) => {
+  const proposalId = c.req.param("id");
+  if (!validateUUID(proposalId)) return c.json({ error: "Invalid proposal ID" }, 400);
+
+  const [proposal] = await db
+    .select()
+    .from(aiProposals)
+    .where(eq(aiProposals.id, proposalId));
+
+  if (!proposal) return c.json({ error: "Proposal not found" }, 404);
+
+  if (!proposal.optionGroup) {
+    return c.json({ proposals: [proposal], isMultiOption: false, optionGroup: null });
+  }
+
+  const group = await db
+    .select()
+    .from(aiProposals)
+    .where(
+      and(
+        eq(aiProposals.optionGroup, proposal.optionGroup),
+        eq(aiProposals.status, "pending")
+      )
+    )
+    .orderBy(aiProposals.createdAt);
+
+  return c.json({
+    proposals: group,
+    isMultiOption: group.length > 1,
+    optionGroup: proposal.optionGroup,
   });
 });
 

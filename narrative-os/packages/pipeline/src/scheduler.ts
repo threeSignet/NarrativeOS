@@ -1,4 +1,4 @@
-import { db, projects, settingItems, aiProposals, mouStates, sessions, projectScales, projectSettings } from "@narrative-os/database";
+import { db, projects, settingItems, aiProposals, mouStates, sessions, projectScales, projectSettings, chapters, worldSnapshots } from "@narrative-os/database";
 import { eq, and, sql } from "drizzle-orm";
 import { getEngine } from "@narrative-os/engines";
 import { Orchestrator } from "./orchestrator";
@@ -109,8 +109,8 @@ export class EngineScheduler {
       this.emit({ type: "project_activated", projectId: event.projectId });
     });
 
-    // 章节提交后：触发主动引擎（memory, censor）
-    this.listen("chapter.committed", (event) => {
+    // 章节提交后：触发主动引擎（memory, censor）+ 保存世界快照
+    this.listen("chapter.committed", async (event) => {
       this.runProactiveEngines(event.projectId, event.chapterId).catch((err: Error) => {
         this.emit({
           type: "engine_error",
@@ -122,6 +122,27 @@ export class EngineScheduler {
       this.embedChapter(event.projectId, event.chapterId).catch((err: Error) => {
         console.error(`[scheduler] Chapter embedding error: ${err.message}`);
       });
+      // v4.0: 自动保存世界快照
+      try {
+        const { buildWorldSnapshot } = await import("@narrative-os/engines");
+        const snapshotData = await buildWorldSnapshot(event.projectId, event.chapterId);
+        await db.insert(worldSnapshots).values({
+          projectId: event.projectId,
+          chapterId: event.chapterId,
+          snapshotType: "chapter_commit",
+          snapshotData: snapshotData as any,
+          itemCount: snapshotData.items.length,
+          relationCount: snapshotData.relations.length,
+          scaleLevels: [...new Set(snapshotData.items.map((i) => i.scaleLevel))],
+        });
+        await db
+          .update(chapters)
+          .set({ worldSnapshot: snapshotData as any, snapshotTakenAt: new Date() })
+          .where(eq(chapters.id, event.chapterId));
+        console.log(`[scheduler] World snapshot saved for chapter ${event.chapterId}`);
+      } catch (err: any) {
+        console.error(`[scheduler] Failed to save world snapshot:`, err.message);
+      }
     });
   }
 
@@ -215,11 +236,11 @@ export class EngineScheduler {
    * 前端不再做任何编排判定，所有阶段判定在此方法中完成。
    */
   async getNextPhase(projectId: string): Promise<{
-    phase: "waiting_approval" | "waiting_revision" | "engine_ready" | "waiting_user_action" | "waiting_phase_confirmation" | "complete";
+    phase: "waiting_approval" | "waiting_revision" | "engine_ready" | "waiting_phase_confirmation" | "complete";
     engine?: string;
     pendingCount?: number;
     refinableCount?: number;
-    refinement?: { parentItemId: string; parentName: string; parentScale: string; targetScale: string; engineSource: string };
+    refinement?: { parentItemId: string; parentName: string; parentScale: string; targetScale: string; engineSource: string; depth: number };
   }> {
     // 1) 有待审批提案 → 等待用户操作
     const pendingProposals = await db
@@ -244,21 +265,25 @@ export class EngineScheduler {
       return { phase: "waiting_revision", engine: revisionProposals[0].sourceNode || undefined };
     }
 
-    // 3) 检查是否需要细化（不再自动触发，仅提示前端有待细化条目）
+    // 3) 检查是否需要细化 — 返回 engine_ready + refinement，由 /advance SSE 统一驱动
     const refinable = await this.getItemsNeedingRefinement(projectId);
     if (refinable.length > 0) {
       const first = refinable[0];
-      console.log(`[scheduler.getNextPhase] → waiting_user_action: ${refinable.length} 个条目待细化，首个 ${first.engineSource}/${first.name} (${first.scale}→${first.targetScale})`);
+      // 计算 depth：目标尺度在默认尺度链中的位置（回退用）
+      const scaleIdx = SCALE_CHAIN.indexOf(first.targetScale as typeof SCALE_CHAIN[number]);
+      const depth = scaleIdx >= 0 ? scaleIdx : 1;
+      console.log(`[scheduler.getNextPhase] → engine_ready (refinement): ${refinable.length} 个条目待细化，首个 ${first.engineSource}/${first.name} (${first.scale}→${first.targetScale})`);
       return {
-        phase: "waiting_user_action",
-        refinableCount: refinable.length,
+        phase: "engine_ready",
         engine: first.engineSource,
+        refinableCount: refinable.length,
         refinement: {
           parentItemId: first.id,
           parentName: first.name,
           parentScale: first.scale,
           targetScale: first.targetScale,
           engineSource: first.engineSource,
+          depth,
         },
       };
     }
@@ -297,6 +322,14 @@ export class EngineScheduler {
 
     if (!project || project.status !== "hatching") {
       console.log(`[scheduler] Project ${projectId} not in hatching status (${project?.status}), skip`);
+      return;
+    }
+
+    // 细化优先于下一引擎：有待细化条目时，不自动运行下一普通引擎
+    // 细化由 getNextPhase 通过 /advance SSE 驱动，确保用户有流式输出感知
+    const refinable = await this.getItemsNeedingRefinement(projectId);
+    if (refinable.length > 0) {
+      console.log(`[scheduler] 发现 ${refinable.length} 个待细化条目，等待 /advance 驱动细化，不自动推进下一引擎`);
       return;
     }
 
@@ -424,15 +457,14 @@ export class EngineScheduler {
   /**
    * Called after user approves/rejects all pending proposals.
    *
-   * 当前策略：
+   * 策略：
    * 1. 检查是否还有 pending 提案 → 如有，等待
-   * 2. 不再自动运行细化循环（由用户手动触发）
-   * 3. 推进到下一个引擎
+   * 2. 推进到下一个引擎（细化由 getNextPhase 统一调度，通过 /advance SSE 驱动）
    */
   async onProposalsResolved(projectId: string): Promise<void> {
     await new Promise((r) => setTimeout(r, 500));
 
-    // 1. 还有 pending 提案？等待用户审批（非细化类的提案需要用户决策）
+    // 1. 还有 pending 提案？等待用户审批
     const stillPending = await db
       .select({ id: mouStates.id })
       .from(mouStates)
@@ -445,15 +477,7 @@ export class EngineScheduler {
 
     if (stillPending.length > 0) return;
 
-    // 2. 检查是否有待细化条目 → 自动运行细化
-    const refinable = await this.getItemsNeedingRefinement(projectId);
-    if (refinable.length > 0) {
-      console.log(`[scheduler] 发现 ${refinable.length} 个待细化条目，启动细化...`);
-      await this.runRefinementLoop(projectId);
-      return;
-    }
-
-    // 3. 没有 pending 且没有待细化 → 推进到下一个引擎
+    // 2. 推进到下一个引擎（细化优先级由 getNextPhase 和 runMissingEngines 保证）
     await this.runMissingEngines(projectId);
   }
 

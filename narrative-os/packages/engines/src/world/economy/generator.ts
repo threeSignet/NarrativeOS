@@ -1,6 +1,6 @@
 import { Engine } from "../../base";
 import type { Proposal, EngineContext } from "../../types";
-import { detectGenre, buildContextReferenceSection, buildEngineUserMessage, buildProjectNarrativeSection } from "../../context";
+import { detectGenre, buildContextReferenceSection, buildEngineUserMessage, buildProjectNarrativeSection, buildGeographyBindingSection } from "../../context";
 
 /**
  * EconomyEngine — 经济体系架构师（多 pass 自适应版）
@@ -39,6 +39,8 @@ ${buildProjectNarrativeSection()}
 
 ${buildContextReferenceSection(["tone", "geography", "power-system", "faction"])}
 
+${buildGeographyBindingSection()}
+
 ## 重要：尺度定位
 本次是初始 pass，定位于 **planet（世界级）** 尺度。你需要设计的是：
 - 世界级核心资源的分布格局
@@ -72,7 +74,10 @@ ${buildContextReferenceSection(["tone", "geography", "power-system", "faction"])
               "uses": ["用途1", "用途2"],
               "controlled_by": ["控制该资源的势力（已确认的势力名）"],
               "extraction_difficulty": "采集/开采难度",
-              "renewable": false
+              "renewable": false,
+              "geographic_bindings": [
+                { "location_name": "已确认的区域名", "binding_type": "resource_source", "description": "资源产地" }
+              ]
             }
           },
           {
@@ -117,7 +122,10 @@ ${buildContextReferenceSection(["tone", "geography", "power-system", "faction"])
               "market_scale": "regional",
               "specialty_goods": ["特色商品1", "商品2"],
               "operated_by": "经营势力（已确认的势力名）",
-              "trade_rules": "特殊交易规则（如有）"
+              "trade_rules": "特殊交易规则（如有）",
+              "geographic_bindings": [
+                { "location_name": "已确认的地点名", "binding_type": "headquarters", "description": "市场所在地" }
+              ]
             }
           },
           {
@@ -184,6 +192,8 @@ ${buildContextReferenceSection(["tone", "geography", "power-system", "faction"])
 父条目层级：${ref.parentScale}  目标细化层级：${targetScale}
 
 ${buildContextReferenceSection(["tone", "geography", "power-system", "faction"])}
+
+${buildGeographyBindingSection()}
 
 ## 细化策略
 请使用 \`query_world_setting\` 工具查询以下数据：

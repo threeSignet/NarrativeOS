@@ -1,6 +1,6 @@
 import { Engine } from "../../base";
 import type { Proposal, EngineContext } from "../../types";
-import { detectGenre, buildContextReferenceSection, buildEngineUserMessage, buildProjectNarrativeSection } from "../../context";
+import { detectGenre, buildContextReferenceSection, buildEngineUserMessage, buildProjectNarrativeSection, buildGeographyBindingSection } from "../../context";
 
 /**
  * TechniqueEngine — 功法/技能体系架构师（多 pass 自适应版）
@@ -42,6 +42,8 @@ ${buildProjectNarrativeSection()}
 
 ${buildContextReferenceSection(["tone", "geography", "power-system", "faction"])}
 
+${buildGeographyBindingSection()}
+
 ## 重要：尺度定位
 本次是初始 pass，定位于 **planet（星球/世界级）** 尺度。你需要设计的是：
 - 各势力/传承体系的核心功法
@@ -78,7 +80,10 @@ ${buildContextReferenceSection(["tone", "geography", "power-system", "faction"])
               "prerequisite_techniques": ["前置功法名"],
               "taught_by": ["传授此功法的势力（已确认的势力名）"],
               "grade": "功法品阶（如：黄阶/玄阶/地阶/天阶，或自定义体系）",
-              "practiced_in": ["修炼此功法的区域（必须引用已确认的地理区域名）"]
+              "practiced_in": ["修炼此功法的区域（必须引用已确认的地理区域名）"],
+              "geographic_bindings": [
+                { "location_name": "已确认的地理区域名", "binding_type": "active_area", "description": "功法主要修炼区域" }
+              ]
             }
           },
           {
@@ -175,6 +180,8 @@ ${buildContextReferenceSection(["tone", "geography", "power-system", "faction"])
 父条目层级：${ref.parentScale}  目标细化层级：${targetScale}
 
 ${buildContextReferenceSection(["tone", "geography", "power-system", "faction"])}
+
+${buildGeographyBindingSection()}
 
 ## 细化策略
 请使用 \`query_world_setting\` 工具查询以下数据：

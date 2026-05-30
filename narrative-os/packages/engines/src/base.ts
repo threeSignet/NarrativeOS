@@ -1,11 +1,13 @@
 import { LLMClient, type Message, type ToolCall } from "@narrative-os/llm-client";
 import type { Proposal, EngineContext, EngineResult, ToolCallEvent, ToolResultEvent } from "./types";
 import { buildWorldContext, buildProjectMetaContext, buildDependencyNameRegistry } from "./context";
-import { db, aiProposals } from "@narrative-os/database";
+import { db, aiProposals, projects } from "@narrative-os/database";
 import { eq, and } from "drizzle-orm";
 import { executeToolCall } from "./engine-tool-executor";
 import { buildQueryWorldSettingToolDef, buildToolSystemPromptSection } from "./tools";
 import { getEngineDef } from "./engine-config";
+import { loadCreationCharter, formatCharterForPrompt } from "./creation-charter";
+import { injectGeoAnchors } from "./geo-anchor";
 
 // Session-level concurrency lock
 const locks = new Map<string, boolean>();
@@ -195,6 +197,12 @@ export abstract class Engine {
     this.name = name;
   }
 
+  /** v4.0: 引擎默认协作模式 */
+  readonly defaultCollaborationMode: "plan" | "auto" | "full_auto" = "auto";
+
+  /** v4.0: 当前执行模式 */
+  protected currentMode: "plan" | "auto" | "full_auto" = "auto";
+
   /** Override: which model tier to use */
   protected getModelTier(): "lightweight" | "pro" {
     return "lightweight";
@@ -298,6 +306,39 @@ export abstract class Engine {
         (p.content.payload as Record<string, unknown>)._refinementParentId = this.currentRefinement.parentItemId;
       }
     }
+  }
+
+  /**
+   * v4.0: 解析当前应使用的协作模式
+   */
+  protected async resolveMode(ctx: EngineContext): Promise<"plan" | "auto" | "full_auto"> {
+    if (ctx.collaborationMode) return ctx.collaborationMode;
+    const [project] = await db
+      .select({ collaborationMode: projects.collaborationMode })
+      .from(projects)
+      .where(eq(projects.id, ctx.projectId));
+    if (project?.collaborationMode === "full_auto") return "full_auto";
+    if (project?.collaborationMode === "plan") return "plan";
+    return this.defaultCollaborationMode;
+  }
+
+  /**
+   * v4.0: 规范化提案输出 — 强制注入 scale 和 geoAnchor
+   */
+  protected async normalizeProposals(proposals: Proposal[], ctx: EngineContext): Promise<Proposal[]> {
+    proposals = this.injectRefinementMeta(proposals, ctx);
+    proposals = await injectGeoAnchors(proposals, this.name, ctx);
+    return proposals;
+  }
+
+  /**
+   * v4.0: 构建带创作宪章的系统提示词
+   */
+  protected async buildSystemPromptWithCharter(ctx: EngineContext, basePrompt: string): Promise<string> {
+    const charter = await loadCreationCharter(ctx.projectId);
+    if (!charter) return basePrompt;
+    const charterSection = formatCharterForPrompt(charter);
+    return `${charterSection}\n\n${basePrompt}`;
   }
 
   /**
@@ -568,7 +609,9 @@ export abstract class Engine {
         }
       }
 
-      const proposals = this.parseOutput(raw);
+      const rawProposals = this.parseOutput(raw);
+      // v4.0: 规范化提案输出（注入 scale、geoAnchor、refinement meta）
+      const proposals = await this.normalizeProposals(rawProposals, ctx);
 
       // 如果解析失败（返回 error 提案或空数组），发送明确的 error 事件
       if (proposals.length === 0 || proposals.every((p) => p.type === "error")) {
@@ -600,8 +643,7 @@ export abstract class Engine {
         return result;
       }
 
-      // 细化模式：强制注入 scale 和 needs_refinement
-      this.injectRefinementMeta(proposals, ctx);
+      // 规范化已完成（normalizeProposals 已包含 injectRefinementMeta + injectGeoAnchors）
       // 提前中断时 capturedUsage 可能不完整，使用本地估算作为兜底
       const finalPromptTokens = capturedUsage?.promptTokens || estimateTokens(fullSystemPrompt + userMessage);
       const finalCompletionTokens = capturedUsage?.completionTokens || estimateTokens(raw);
@@ -840,7 +882,9 @@ export abstract class Engine {
         }
       }
 
-      const proposals = this.parseOutput(rawOutput);
+      const rawProposals = this.parseOutput(rawOutput);
+      // v4.0: 规范化提案输出
+      const proposals = await this.normalizeProposals(rawProposals, ctx);
 
       // 如果解析失败，发送明确的 error 事件
       if (proposals.length === 0 || proposals.every((p) => p.type === "error")) {
@@ -872,7 +916,7 @@ export abstract class Engine {
         return result;
       }
 
-      this.injectRefinementMeta(proposals, ctx);
+      // 规范化已完成（normalizeProposals 已包含 injectRefinementMeta + injectGeoAnchors）
       const finalPromptTokens = capturedUsage?.promptTokens || estimateTokens(fullSystemPrompt + userMessage);
       const finalCompletionTokens = capturedUsage?.completionTokens || estimateTokens(rawOutput);
       const result: EngineResult = {

@@ -12,14 +12,12 @@ export interface EngineContext {
   snapshotChapterId?: string;
   /**
    * 细化上下文 — 引擎在细化模式下运行时提供，指定要细化的父条目和目标尺度。
-   *
-   * 多 pass 工作流：
-   * 1. 引擎首次运行（无 refinement）→ 自动检测尺度 → 产出顶层条目
-   * 2. 用户确认某条目后，调用引擎.run(refinement: { parentItemId, ... })
-   * 3. 引擎为该父条目生成更细粒度的子条目
-   * 4. 重复直到满意的深度
    */
   refinement?: RefinementContext;
+  /** v4.0: 创作宪章 */
+  creationCharter?: CreationCharter;
+  /** v4.0: 当前协作模式（项目级覆盖后的实际模式） */
+  collaborationMode?: "plan" | "auto" | "full_auto";
 }
 
 /**
@@ -129,3 +127,38 @@ export const VALID_RELATION_TYPES = [
   "geographic", "affiliation", "adjacency", "functional",
   "passage", "barrier", "engulfment", "resonance", "phase_shift", "absence",
 ] as const;
+
+// ── v4.0 创作宪章类型 ──
+
+export interface CreationCharter {
+  storySeed: string;
+  mainLineBlueprint: {
+    structureMode: string;
+    acts: Array<{ actNumber: number; title: string; summary: string; keyEvents: string[] }>;
+    totalVolumes: number;
+    totalChapters: number;
+  };
+  coreCharacters: Array<{
+    name: string;
+    role: "protagonist" | "antagonist" | "supporting" | "mentor";
+    archetype: string;
+    personality: string;
+    motivation: string;
+    growthArc: string;
+  }>;
+  worldRules: Array<{
+    category: "physics" | "power_system" | "society" | "economy" | "culture";
+    rule: string;
+    implications: string[];
+  }>;
+  narrativeRules: {
+    writingStyle: string;
+    pace: "fast" | "medium" | "slow";
+    pov: "first_person" | "third_person_limited" | "third_person_omniscient";
+    tone: string;
+    dialogueStyle: string;
+    descriptionDensity: "minimal" | "moderate" | "rich";
+  };
+  version: number;
+  lastModifiedAt: string;
+}

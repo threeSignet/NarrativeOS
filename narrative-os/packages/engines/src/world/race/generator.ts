@@ -1,6 +1,6 @@
 import { Engine } from "../../base";
 import type { Proposal, EngineContext } from "../../types";
-import { detectGenre, buildContextReferenceSection, buildEngineUserMessage, buildProjectNarrativeSection } from "../../context";
+import { detectGenre, buildContextReferenceSection, buildEngineUserMessage, buildProjectNarrativeSection, buildGeographyBindingSection } from "../../context";
 
 /**
  * RaceEngine — 种族/生物体系架构师（多 pass 自适应版）
@@ -39,6 +39,8 @@ ${buildProjectNarrativeSection()}
 
 ${buildContextReferenceSection(["tone", "geography", "power-system"])}
 
+${buildGeographyBindingSection()}
+
 ## 重要：尺度定位
 本次是初始 pass，定位于 **continent（大陆级）** 尺度。你需要设计的是：
 - 世界级智能种族的宏观分布
@@ -74,7 +76,10 @@ ${buildContextReferenceSection(["tone", "geography", "power-system"])}
               "affinity": "元素/能量亲和性（必须与力量体系协调）",
               "social_structure": "社会结构（如：部落制/帝国制/城邦联盟）",
               "inter_race_relations": "与其他种族的关系简述",
-              "racial_history": "种族历史简述"
+              "racial_history": "种族历史简述",
+              "geographic_bindings": [
+                { "location_name": "已确认的区域名", "binding_type": "habitat", "description": "主要栖息地" }
+              ]
             }
           },
           {
@@ -90,7 +95,10 @@ ${buildContextReferenceSection(["tone", "geography", "power-system"])}
               "rarity": "rare",
               "materials": ["可采集材料1", "材料2"],
               "size": "体型描述",
-              "behavior": "习性描述"
+              "behavior": "习性描述",
+              "geographic_bindings": [
+                { "location_name": "已确认的地点名", "binding_type": "habitat", "description": "出没区域" }
+              ]
             }
           },
           {
@@ -154,6 +162,8 @@ ${buildContextReferenceSection(["tone", "geography", "power-system"])}
 父条目层级：${ref.parentScale}  目标细化层级：${targetScale}
 
 ${buildContextReferenceSection(["tone", "geography", "power-system"])}
+
+${buildGeographyBindingSection()}
 
 ## 细化策略
 请使用 \`query_world_setting\` 工具查询以下数据：

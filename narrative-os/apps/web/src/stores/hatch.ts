@@ -147,7 +147,7 @@ export interface EngineInfo {
   hasPending: boolean
 }
 
-type HatchPhase = 'idle' | 'streaming' | 'waiting' | 'world_complete' | 'complete' | 'waiting_phase_confirmation' | 'waiting_user_action'
+type HatchPhase = 'idle' | 'streaming' | 'waiting' | 'world_complete' | 'complete' | 'waiting_phase_confirmation'
 
 interface HatchStore {
   phase: HatchPhase
@@ -175,6 +175,10 @@ interface HatchStore {
   phaseConfirmationTarget: string | null
   // 细化引擎上下文（用于友好显示细化信息）
   _refinementContext: { parentName: string; parentScale: string; targetScale: string } | null
+  // v4.0: 当前 MOU 展示的提案组
+  currentProposalGroup: Proposal[]
+  currentOptionGroup: string | null
+  selectedOptionId: string | null
 
   fetchProposals: (projectId: string) => Promise<void>
   fetchSettings: (projectId: string) => Promise<void>
@@ -203,6 +207,9 @@ interface HatchStore {
   _clearCompletedJobs: () => void
   // 共享的 SSE 流式处理：startHatching / runEngine 共用
   _executeEngineSSE: (projectId: string, engine: string, jobId: string, controller: AbortController, fetchUrl: string, fetchBody?: Record<string, unknown>) => Promise<void>
+  // v4.0: 多方案相关方法
+  loadProposalGroup: (proposalId: string) => Promise<void>
+  selectOption: (proposalId: string) => void
 }
 
 export const useHatchStore = create<HatchStore>((set, get) => ({
@@ -225,6 +232,9 @@ export const useHatchStore = create<HatchStore>((set, get) => ({
   _lastTokenUpdate: 0,
   _relations: [],
   _refinementContext: null,
+  currentProposalGroup: [],
+  currentOptionGroup: null,
+  selectedOptionId: null,
 
   registerLLMJob: (jobId, jobLabel, status) => {
     const jobs = { ...get().activeLLMJobs }
@@ -445,9 +455,6 @@ export const useHatchStore = create<HatchStore>((set, get) => ({
             specialPhase = 'waiting_phase_confirmation'
             const targetPhase = (data.currentPhase as string) || null
             set({ phase: 'waiting_phase_confirmation', phaseConfirmationTarget: targetPhase })
-          } else if (eventType === 'phase' && data.phase === 'waiting_user_action') {
-            specialPhase = 'waiting_user_action'
-            // 保持 waiting，用户需在地图视图中手动触发细化
           } else if (eventType === 'phase' && (data.phase as string)?.startsWith('waiting_')) {
             // 等待审批状态 — 不做特殊处理，onDone 后的 fetchProposals 会处理
           } else if (eventType === 'phase' && data.phase === 'studio_engine') {
@@ -808,7 +815,41 @@ export const useHatchStore = create<HatchStore>((set, get) => ({
     }
   },
 
+  // v4.0: 加载提案组（多方案选择）
+  loadProposalGroup: async (proposalId: string) => {
+    try {
+      const data = await apiFetch<{ proposals: Proposal[]; isMultiOption: boolean; optionGroup: string | null }>(`/proposals/${proposalId}/group`)
+      set({
+        currentProposalGroup: data.proposals,
+        currentOptionGroup: data.optionGroup,
+        selectedOptionId: data.isMultiOption ? null : data.proposals[0]?.id,
+      })
+    } catch (err) {
+      console.error('[hatch] loadProposalGroup failed:', err)
+    }
+  },
+
+  // v4.0: 选择方案
+  selectOption: (proposalId: string) => {
+    set({ selectedOptionId: proposalId })
+  },
+
   approveProposal: async (proposalId, projectId) => {
+    const selectedOptionId = get().selectedOptionId
+
+    // v4.0: 如果选择了特定选项，先拒绝同组其他选项
+    if (selectedOptionId && selectedOptionId !== proposalId) {
+      const group = get().currentProposalGroup
+      const toSupersede = group.filter((p) => p.id !== selectedOptionId && p.status === 'pending')
+      for (const p of toSupersede) {
+        try {
+          await apiPost(`/proposals/${p.id}/reject`, { reason: '作者选择了其他方案' })
+        } catch { /* ignore */ }
+      }
+      // 使用选中的选项作为实际审批目标
+      proposalId = selectedOptionId
+    }
+
     let res: { success: boolean; proposalId: string; settingItemsCreated: number; refinementPending?: any; nextEngine?: { name: string; phase: string; hatchGroup?: string } | null };
     try {
       res = await apiPost<{ success: boolean; proposalId: string; settingItemsCreated: number; refinementPending?: any; nextEngine?: { name: string; phase: string; hatchGroup?: string } | null }>(`/proposals/${proposalId}/approve`, {})
@@ -836,7 +877,7 @@ export const useHatchStore = create<HatchStore>((set, get) => ({
         }
       }
     }
-    set({ proposals, autoPopupProposalId: null })
+    set({ proposals, autoPopupProposalId: null, selectedOptionId: null, currentProposalGroup: [], currentOptionGroup: null })
 
     // 编排完全由后端驱动：approve 端点自动触发 onProposalsResolved
     // 前端只需同步最新数据，不做任何编排决策
@@ -940,6 +981,6 @@ export const useHatchStore = create<HatchStore>((set, get) => ({
 
   reset: () => {
     get()._abortController?.abort()
-    set({ phase: 'idle', hatchGroup: 'world', phaseConfirmationTarget: null, proposals: [], settingItems: [], engines: [], streamText: '', lastStreamText: '', error: null, llmStatus: null, activeLLMJobs: {}, locked: false, currentEngine: null, _abortController: null, autoPopupProposalId: null, proposalListOpen: false, _lastTokenUpdate: 0, _relations: [], _refinementContext: null })
+    set({ phase: 'idle', hatchGroup: 'world', phaseConfirmationTarget: null, proposals: [], settingItems: [], engines: [], streamText: '', lastStreamText: '', error: null, llmStatus: null, activeLLMJobs: {}, locked: false, currentEngine: null, _abortController: null, autoPopupProposalId: null, proposalListOpen: false, _lastTokenUpdate: 0, _relations: [], _refinementContext: null, currentProposalGroup: [], currentOptionGroup: null, selectedOptionId: null })
   },
 }))

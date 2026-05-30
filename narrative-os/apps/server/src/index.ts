@@ -17,6 +17,9 @@ import brainstorm from "./routes/brainstorm";
 import companion from "./routes/companion";
 import outline from "./routes/outline";
 import vector from "./routes/vector";
+import charterRoutes from "./routes/charter";
+import snapshotRoutes from "./routes/snapshots";
+import timelineRoutes from "./routes/timeline";
 
 const app = new Hono();
 app.use(cors({
@@ -37,6 +40,9 @@ app.route("/brainstorm", brainstorm);
 app.route("/companion", companion);
 app.route("/outline", outline);
 app.route("/vector", vector);
+app.route("/api", charterRoutes);
+app.route("/api", snapshotRoutes);
+app.route("/api", timelineRoutes);
 
 // ── WebSocket setup ──
 const { injectWebSocket, upgradeWebSocket } = createNodeWebSocket({ app });

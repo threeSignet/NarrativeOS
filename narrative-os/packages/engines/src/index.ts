@@ -104,3 +104,11 @@ registerEngine("foreshadowing", ForeshadowingEngine);
 registerEngine("chapter-writer", ChapterWriterEngine);
 registerEngine("memory-extractor", MemoryExtractorEngine);
 registerEngine("censor-checker", CensorCheckerEngine);
+
+// ── v4.0 新增模块 ──
+export { loadCreationCharter, formatCharterForPrompt } from "./creation-charter";
+export type { CreationCharter } from "./types";
+export { inferDefaultScale, buildGeoAnchor, injectGeoAnchors } from "./geo-anchor";
+export type { GeoAnchor } from "./geo-anchor";
+export { buildWorldSnapshot } from "./world-snapshot";
+export type { WorldSnapshotData } from "./world-snapshot";

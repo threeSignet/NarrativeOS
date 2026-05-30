@@ -1,6 +1,6 @@
 import { Engine } from "../../base";
 import type { Proposal, EngineContext } from "../../types";
-import { detectGenre, buildContextReferenceSection, buildEngineUserMessage, buildProjectNarrativeSection } from "../../context";
+import { detectGenre, buildContextReferenceSection, buildEngineUserMessage, buildProjectNarrativeSection, buildGeographyBindingSection } from "../../context";
 
 /**
  * CharacterEngine — 角色体系架构师（多 pass 自适应版）
@@ -38,6 +38,8 @@ ${buildProjectNarrativeSection()}
 为一部 ${genre} 题材的长篇小说设计核心角色体系**顶层架构**。请提供 2-3 个方案（不同主角设定、不同角色关系网）。
 
 ${buildContextReferenceSection(["tone", "faction", "power-system", "geography", "race", "rules"])}
+
+${buildGeographyBindingSection()}
 
 ## 重要：如何阅读地理上下文
 你将在对话中看到已确认的【地理环境】设定，其中每个地点都标注了：
@@ -83,7 +85,11 @@ ${buildContextReferenceSection(["tone", "faction", "power-system", "geography", 
               "location": "当前所在位置（必须使用已确认的城市/地点名，不是区域名，要精确到具体城市）",
               "location_coordinates": { "x": 480, "y": 120 },
               "growth_arc": "成长弧线简述（从什么状态→经历什么→成长为什么状态）",
-              "rule_constraints": "受哪些已确认规则的约束/影响（如：修为上限被某规则限制、行为受某社会规则约束）"
+              "rule_constraints": "受哪些已确认规则的约束/影响（如：修为上限被某规则限制、行为受某社会规则约束）",
+              "geographic_bindings": [
+                { "location_name": "已确认的城市/地点名", "binding_type": "active_area", "description": "当前所在位置" },
+                { "location_name": "已确认的地点名", "binding_type": "origin", "description": "出生地/出身地" }
+              ]
             }
           },
           {
@@ -104,7 +110,10 @@ ${buildContextReferenceSection(["tone", "faction", "power-system", "geography", 
               "location_coordinates": { "x": 500, "y": 200 },
               "power_level": "当前实力（已确认的境界名）",
               "personal_goal": "个人目标（独立于主角的、属于自己的动机）",
-              "conflict_with_mc": "与主角可能产生的矛盾点"
+              "conflict_with_mc": "与主角可能产生的矛盾点",
+              "geographic_bindings": [
+                { "location_name": "已确认的城市/地点名", "binding_type": "active_area", "description": "当前所在位置" }
+              ]
             }
           }
         ],
@@ -163,6 +172,8 @@ ${buildContextReferenceSection(["tone", "faction", "power-system", "geography", 
 
 ${buildContextReferenceSection(["tone", "faction", "power-system", "geography", "race", "rules"])}
 
+${buildGeographyBindingSection()}
+
 ## 细化策略
 请使用 \`query_world_setting\` 工具查询以下数据：
 1. 父条目「${ref.parentName}」的详细设定（如果是区域/城市，了解其地理和势力；如果是角色，了解其社交圈）
@@ -204,7 +215,10 @@ ${buildContextReferenceSection(["tone", "faction", "power-system", "geography", 
               "location_coordinates": { "x": 500, "y": 300 },
               "power_level": "当前实力",
               "personal_goal": "个人目标",
-              "regional_significance": "在本地域的重要性"
+              "regional_significance": "在本地域的重要性",
+              "geographic_bindings": [
+                { "location_name": "已确认的${targetScale}级地点名", "binding_type": "active_area", "description": "当前活动区域" }
+              ]
             }
           }
         ],

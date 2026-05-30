@@ -3,7 +3,7 @@ import type { Proposal, EngineContext } from "../../types";
 import { detectGenre, buildContextReferenceSection, buildEngineUserMessage, buildProjectNarrativeSection, loadProjectScales } from "../../context";
 import type { MapScale } from "./types";
 import { db, settingItems } from "@narrative-os/database";
-import { eq, and } from "drizzle-orm";
+import { eq, and, ne } from "drizzle-orm";
 
 /**
  * GeographyEngine — 地理环境架构师（多 pass 自适应版）
@@ -103,7 +103,7 @@ export class GeographyEngine extends Engine {
     // parentItemId 为 null 的条目没有同级兄弟（它们是根条目）
     if (!parent.parentItemId) return [];
 
-    // 查询相同 parentItemId 的所有条目（排除自身）
+    // 查询相同 parentItemId 的所有条目（排除父条目自身，避免 LLM 将父条目误认为同级）
     const siblings = await db
       .select({ name: settingItems.name })
       .from(settingItems)
@@ -112,6 +112,7 @@ export class GeographyEngine extends Engine {
           eq(settingItems.projectId, projectId),
           eq(settingItems.status, "confirmed"),
           eq(settingItems.parentItemId, parent.parentItemId),
+          ne(settingItems.id, parentItemId),
         )
       );
     return siblings.map(s => s.name);

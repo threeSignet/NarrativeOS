@@ -95,6 +95,7 @@ export default function LLMStatusPopup() {
   useClickOutside(configRef, () => setShowConfig(false), showConfig)
 
   const activeJobs = Object.values(activeLLMJobs).filter((j): j is ActiveLLMJob => j.active)
+  const doneJobs = Object.values(activeLLMJobs).filter((j): j is ActiveLLMJob => !j.active)
 
   // Derived display values
   const provider = llmStatus?.provider || DEFAULT_PROVIDER

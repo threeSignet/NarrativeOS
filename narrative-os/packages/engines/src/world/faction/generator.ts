@@ -1,6 +1,6 @@
 import { Engine } from "../../base";
 import type { Proposal, EngineContext } from "../../types";
-import { detectGenre, buildContextReferenceSection, buildEngineUserMessage, buildProjectNarrativeSection } from "../../context";
+import { detectGenre, buildContextReferenceSection, buildEngineUserMessage, buildProjectNarrativeSection, buildGeographyBindingSection } from "../../context";
 
 /**
  * FactionEngine — 势力分布架构师（多 pass 自适应版）
@@ -40,6 +40,8 @@ ${buildProjectNarrativeSection()}
 为一部 ${genre} 题材的长篇小说设计势力分布的**顶层格局**。
 
 ${buildContextReferenceSection(["tone", "geography", "power-system"])}
+
+${buildGeographyBindingSection()}
 
 ## 重要：如何对齐地理层级
 你将在对话中看到已确认的【地理环境】设定。每个条目标注了 scale 和坐标。
@@ -90,7 +92,11 @@ ${buildContextReferenceSection(["tone", "geography", "power-system"])}
               "internal_factions": "内部派系",
               "culture": "组织文化/行事风格",
               "geographic_strategy": "为什么选择这个总部位置？控制这些领土的战略目的是什么？",
-              "needs_refinement": true
+              "needs_refinement": true,
+              "geographic_bindings": [
+                { "location_name": "已确认的地理条目名称", "binding_type": "headquarters", "description": "总部所在地" },
+                { "location_name": "已确认的区域名称", "binding_type": "territory", "description": "势力范围" }
+              ]
             }
           }
         ],
@@ -122,6 +128,8 @@ ${buildContextReferenceSection(["tone", "geography", "power-system"])}
 当前细化深度：${ref.depth}
 
 ${buildContextReferenceSection(["tone", "geography", "power-system"])}
+
+${buildGeographyBindingSection()}
 
 ## 细化策略
 请使用 \`query_world_setting\` 工具查询以下数据：
@@ -162,7 +170,11 @@ ${buildContextReferenceSection(["tone", "geography", "power-system"])}
               "power_level": "实力评级",
               "culture": "行事风格",
               "geographic_strategy": "地理战略",
-              "needs_refinement": true
+              "needs_refinement": true,
+              "geographic_bindings": [
+                { "location_name": "已确认的${ref.targetScale}级地理条目名称", "binding_type": "headquarters", "description": "总部所在地" },
+                { "location_name": "已确认的${ref.targetScale}级区域名称", "binding_type": "territory", "description": "势力范围" }
+              ]
             }
           }
         ],

@@ -1,6 +1,6 @@
 import { Engine } from "../../base";
 import type { Proposal, EngineContext } from "../../types";
-import { detectGenre, buildContextReferenceSection, buildEngineUserMessage, buildProjectNarrativeSection } from "../../context";
+import { detectGenre, buildContextReferenceSection, buildEngineUserMessage, buildProjectNarrativeSection, buildGeographyBindingSection } from "../../context";
 
 /**
  * CultureEngine — 文化体系架构师（多 pass 自适应版）
@@ -42,6 +42,8 @@ ${buildProjectNarrativeSection()}
 
 ${buildContextReferenceSection(["tone", "geography", "power-system", "faction", "race"])}
 
+${buildGeographyBindingSection()}
+
 ## 重要：尺度定位
 本次是初始 pass，定位于 **continent（大陆级）** 尺度。你需要设计的是：
 - 不同大陆/世界的宏观文化格局
@@ -73,7 +75,10 @@ ${buildContextReferenceSection(["tone", "geography", "power-system", "faction", 
               "used_by": ["使用势力/种族（已确认的名称）"],
               "writing_system": "文字系统描述",
               "features": "语言特色（敬语体系/禁忌词汇/方言分化等）",
-              "is_common_tongue": false
+              "is_common_tongue": false,
+              "geographic_bindings": [
+                { "location_name": "已确认的区域名", "binding_type": "influence_zone", "description": "使用区域" }
+              ]
             }
           },
           {
@@ -89,7 +94,11 @@ ${buildContextReferenceSection(["tone", "geography", "power-system", "faction", 
               "core_doctrines": ["核心教义1", "核心教义2"],
               "religious_organization": "教会/组织结构的描述",
               "holy_sites": ["圣地（已确认的地点名）"],
-              "political_influence": "对世俗权力的影响程度"
+              "political_influence": "对世俗权力的影响程度",
+              "geographic_bindings": [
+                { "location_name": "已确认的地点名", "binding_type": "influence_zone", "description": "主要信仰区域" },
+                { "location_name": "已确认的地点名", "binding_type": "headquarters", "description": "圣地/总部" }
+              ]
             }
           },
           {
@@ -195,6 +204,8 @@ ${buildContextReferenceSection(["tone", "geography", "power-system", "faction", 
 父条目层级：${ref.parentScale}  目标细化层级：${targetScale}
 
 ${buildContextReferenceSection(["tone", "geography", "power-system", "faction", "race"])}
+
+${buildGeographyBindingSection()}
 
 ## 细化策略
 请使用 \`query_world_setting\` 工具查询以下数据：

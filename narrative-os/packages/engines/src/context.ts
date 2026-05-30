@@ -463,6 +463,28 @@ export async function getProjectChildScale(
   return scales.find((s) => s.parentKey === current.key) ?? null;
 }
 
+/**
+ * 生成地理绑定约束的标准 prompt 段落。
+ *
+ * 要求 LLM 在每个 item 的 content 中输出 geographic_bindings 字段，
+ * 以统一格式关联已确认的地理条目名称。
+ * 这使得系统能跨引擎回答"这个实体在哪个地理位置"类查询。
+ */
+export function buildGeographyBindingSection(): string {
+  return `
+## 地理位置绑定（必须）
+每个 item 的 content 中**必须**包含 \`geographic_bindings\` 字段，格式如下：
+\`\`\`json
+"geographic_bindings": [
+  { "location_name": "已确认的地理条目名称", "binding_type": "绑定类型", "description": "简述该实体与此地点的关系" }
+]
+\`\`\`
+- \`location_name\` 必须使用 \`query_world_setting\` 工具查询已确认的地理条目精确名称，不得自行编造
+- \`binding_type\` 可选值：\`headquarters\`（总部/驻扎地）、\`territory\`（势力范围）、\`origin\`（发源地/出生地）、\`active_area\`（活动区域）、\`influence_zone\`（影响范围）、\`habitat\`（栖息地）、\`resource_source\`（资源产地）
+- 至少为每个 item 指定 1 个地理绑定，优先使用精确的城市/地点级别名称
+- 如果某个 item 的内容中已有 headquarters / territory / location / habitat 等字段，\`geographic_bindings\` 应与之一致并作为标准化的补充`;
+}
+
 /** 生成注入引擎 prompt 的尺度描述文本 */
 export async function buildScaleContext(projectId: string): Promise<string> {
   const scales = await loadProjectScales(projectId);

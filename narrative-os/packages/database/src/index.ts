@@ -65,6 +65,7 @@ export {
   notificationReads, projectSettings, outlines, volumes, chapters,
   outlineItems, projectDailyStats, projectScales,
   chapterSettingReferences, settingItemVersions, embeddings,
+  geoAnchors, settingItemChanges, worldSnapshots,
 } from "./schema";
 
 // 同时导入值以支持 typeof 类型推断

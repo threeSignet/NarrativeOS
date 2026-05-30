@@ -1,6 +1,6 @@
 import { Engine } from "../../base";
 import type { Proposal, EngineContext } from "../../types";
-import { detectGenre, buildContextReferenceSection, buildEngineUserMessage, buildProjectNarrativeSection } from "../../context";
+import { detectGenre, buildContextReferenceSection, buildEngineUserMessage, buildProjectNarrativeSection, buildGeographyBindingSection } from "../../context";
 
 /**
  * PowerSystemEngine — 力量体系架构师（多 pass 自适应版）
@@ -45,6 +45,8 @@ ${buildProjectNarrativeSection()}
 
 ${buildContextReferenceSection(["tone", "geography"])}
 
+${buildGeographyBindingSection()}
+
 ## 重要：尺度定位
 本次是初始 pass，定位于 **planet（世界级）** 尺度。你需要设计的是涵盖整个世界的通用力量体系框架：
 - 力量体系的根基（力量来源、核心规则）
@@ -76,7 +78,10 @@ ${buildContextReferenceSection(["tone", "geography"])}
               "source_regions": ["力量来源的地理区域（必须引用已确认的地理区域名）"],
               "dominant_regions": ["此力量体系占主导的地理区域（必须引用已确认的地理区域名）"],
               "progression": "晋升路径的整体描述",
-              "limitations": "整体限制与必须付出的代价"
+              "limitations": "整体限制与必须付出的代价",
+              "geographic_bindings": [
+                { "location_name": "已确认的地理条目名称", "binding_type": "active_area", "description": "该力量体系的主要分布区域" }
+              ]
             }
           },
           {
@@ -157,6 +162,8 @@ ${buildContextReferenceSection(["tone", "geography"])}
 
 ${buildContextReferenceSection(["tone", "geography"])}
 
+${buildGeographyBindingSection()}
+
 ## 细化策略
 请使用 \`query_world_setting\` 工具查询以下数据：
 1. 父条目「${ref.parentName}」的详细设定（力量类型、境界体系、核心规则）
@@ -189,7 +196,10 @@ ${buildContextReferenceSection(["tone", "geography"])}
               "type": "力量体系类型（与父体系的关系：分支/变种/增强/削弱）",
               "geographic_focus": "关联的${targetScale}级地理条目（已确认的名称）",
               "regional_features": "该区域力量的特殊属性",
-              "source": "区域力量来源（与当地地理特征的关系）"
+              "source": "区域力量来源（与当地地理特征的关系）",
+              "geographic_bindings": [
+                { "location_name": "已确认的${targetScale}级地理条目名称", "binding_type": "active_area", "description": "该变体的分布区域" }
+              ]
             }
           },
           {
