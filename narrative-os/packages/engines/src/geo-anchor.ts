@@ -1,6 +1,6 @@
 // narrative-os/packages/engines/src/geo-anchor.ts
 import { db, settingItems } from "@narrative-os/database";
-import { eq, and } from "drizzle-orm";
+import { eq, and, like } from "drizzle-orm";
 import type { EngineContext, Proposal } from "./types";
 
 export interface GeoAnchor {
@@ -57,17 +57,33 @@ export async function buildGeoAnchor(
   // 尝试匹配已确认的地理条目作为 parentLocationId
   let parentLocationId: string | null = null;
   if (locationName && engineName !== "geography") {
-    const [geoItem] = await db
+    // 优先精确匹配名称
+    const [exactMatch] = await db
       .select({ id: settingItems.id })
       .from(settingItems)
       .where(
         and(
           eq(settingItems.projectId, ctx.projectId),
           eq(settingItems.status, "confirmed"),
-          eq(settingItems.type, "geography")
+          eq(settingItems.name, locationName)
         )
       );
-    if (geoItem) parentLocationId = geoItem.id;
+    if (exactMatch) {
+      parentLocationId = exactMatch.id;
+    } else {
+      // 回退：模糊匹配名称
+      const [fuzzyMatch] = await db
+        .select({ id: settingItems.id })
+        .from(settingItems)
+        .where(
+          and(
+            eq(settingItems.projectId, ctx.projectId),
+            eq(settingItems.status, "confirmed"),
+            like(settingItems.name, `%${locationName}%`)
+          )
+        );
+      if (fuzzyMatch) parentLocationId = fuzzyMatch.id;
+    }
   }
 
   return {

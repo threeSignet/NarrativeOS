@@ -2,6 +2,7 @@ import { Hono } from "hono";
 import { stream } from "hono/streaming";
 import { getEngine, listEngines, getEngineDef, type EngineResult } from "@narrative-os/engines";
 import { Orchestrator, EngineScheduler, bus } from "@narrative-os/pipeline";
+import type { SpectrumEvaluation } from "@narrative-os/pipeline";
 import { db, projects, sessions, aiProposals, settingItems, projectSettings, mouStates, notifications, notificationReads, chapters, settingItemRelations, projectScales } from "@narrative-os/database";
 import { eq, and, ne } from "drizzle-orm";
 import { wsBus } from "../ws-bus";
@@ -45,8 +46,8 @@ async function executeEngineSSEStream(
   s: SSEStream,
   projectId: string,
   engineName: string,
-  project: { genre: string; title: string },
-  opts?: { refinement?: import("@narrative-os/engines").RefinementContext },
+  project: { genre: string; title: string; collaborationMode?: string | null },
+  opts?: { refinement?: import("@narrative-os/engines").RefinementContext; authorNotes?: string },
 ) {
   const safeWrite = (data: string): boolean => {
     try { s.write(data); return true; }
@@ -59,7 +60,7 @@ async function executeEngineSSEStream(
   };
 
   const node = getEngine(engineName);
-  const { refinement } = opts || {};
+  const { refinement, authorNotes } = opts || {};
 
   // 立即通知前端当前运行的引擎名（解决 P0-1: advanceHatching 不设 currentEngine）
   safeWrite(`event: engine_name\ndata: ${JSON.stringify({ engine: engineName })}\n\n`);
@@ -92,6 +93,7 @@ async function executeEngineSSEStream(
       sessionId: session.id,
       caller: `genre=${project.genre}, title=${project.title}`,
       refinement,
+      authorNotes,
     })) {
       if (event.type === "chunk") {
         if (!safeWrite(`event: chunk\ndata: ${JSON.stringify({ text: event.text })}\n\n`)) return;
@@ -133,6 +135,32 @@ async function executeEngineSSEStream(
     const proposalIds = await orchestrator.stageProposals(projectId, session.id, result, engineName);
     safeWrite(`event: staged\ndata: ${JSON.stringify({ proposalCount: proposalIds.length })}\n\n`);
 
+    // v4.0: full_auto 模式下根据 MOU 频谱评估自动审批
+    let autoApproved = false;
+    let spectrumResult: any = null;
+    if (proposalIds.length > 0 && project.collaborationMode === "full_auto") {
+      const [firstProposal] = await db
+        .select({ mouSpectrum: aiProposals.mouSpectrum })
+        .from(aiProposals)
+        .where(eq(aiProposals.id, proposalIds[0]));
+      spectrumResult = firstProposal?.mouSpectrum;
+      const spectrum = spectrumResult as SpectrumEvaluation | null;
+
+      if (spectrum?.checkpointTriggered) {
+        console.log(`[sse] full_auto: 检查点引擎 ${engineName} 触发暂停，等待作者确认`);
+      } else if (spectrum && (spectrum.band === "green" || spectrum.band === "yellow")) {
+        try {
+          console.log(`[sse] full_auto: 频谱 ${spectrum.band} (${spectrum.overallScore}分)，自动审批提案 ${proposalIds[0]}`);
+          await orchestrator.approveProposal(proposalIds[0], `全自动模式自动审批（频谱: ${spectrum.band} ${spectrum.overallScore}分）`);
+          autoApproved = true;
+        } catch (err: any) {
+          console.error(`[sse] full_auto auto-approve failed:`, err.message);
+        }
+      } else {
+        console.log(`[sse] full_auto: 频谱 ${spectrum?.band || "unknown"}，不满足自动审批条件，等待作者确认`);
+      }
+    }
+
     const proposals = await db
       .select()
       .from(aiProposals)
@@ -144,6 +172,8 @@ async function executeEngineSSEStream(
       sessionId: session.id,
       engine: engineName,
       proposalCount: proposalIds.length,
+      autoApproved,
+      spectrum: spectrumResult,
       proposals: proposals.map((p) => ({
         id: p.id,
         type: p.type,
@@ -158,6 +188,11 @@ async function executeEngineSSEStream(
     wsBus.push(projectId, { type: "engine_done", payload: donePayload as Record<string, unknown> });
     if (proposalIds.length > 0) {
       wsBus.push(projectId, { type: "new_proposals", payload: { proposalIds, count: proposalIds.length } });
+    }
+
+    // v4.0: full_auto 模式下自动推进下一个引擎（SSE 完成后）
+    if (autoApproved && scheduler) {
+      await scheduler.onProposalsResolved(projectId);
     }
   } catch (err: any) {
     console.error(`[sse] ${engineName} stream error:`, err.message);
@@ -198,6 +233,11 @@ app.post("/hatch/:id/advance", async (c) => {
 
   const [project] = await db.select().from(projects).where(eq(projects.id, projectId));
   if (!project) return c.json({ error: "Project not found" }, 404);
+
+  // 读取请求 body（可能包含 plan 模式的 authorNotes）
+  let body: Record<string, unknown> = {};
+  try { body = await c.req.json(); } catch { /* 无 body 或解析失败，忽略 */ }
+  const authorNotes = typeof body.authorNotes === "string" ? body.authorNotes : undefined;
 
   // 获取当前阶段
   const phaseInfo = await scheduler.getNextPhase(projectId);
@@ -266,6 +306,21 @@ app.post("/hatch/:id/advance", async (c) => {
 
     // ── 待运行引擎 → SSE 流式（含细化模式）──
     if (phaseInfo.phase === "engine_ready" && phaseInfo.engine) {
+      // v4.0: plan 模式下，引擎运行前询问作者意图
+      if (project.collaborationMode === "plan" && !authorNotes) {
+        const { ENGINE_REGISTRY } = await import("@narrative-os/engines");
+        const engineDef = ENGINE_REGISTRY.find((e) => e.name === phaseInfo.engine);
+        safeWrite(`event: phase\ndata: ${JSON.stringify({
+          phase: "waiting_author_input",
+          engine: phaseInfo.engine,
+          engineLabel: engineDef?.label || phaseInfo.engine,
+          message: `「${engineDef?.label || phaseInfo.engine}」即将开始运行。请提供你的想法和要求，AI 将据此生成方案。`,
+        })}\n\n`);
+        safeWrite(`event: done\ndata: ${JSON.stringify({ success: true })}\n\n`);
+        releaseLock();
+        return;
+      }
+
       // 工作室引擎（大纲/卷纲/章纲/写作）：有专门的 SSE 端点和前端路由
       // 发送 handoff 事件让前端用 outline store 接管
       const { ENGINE_REGISTRY } = await import("@narrative-os/engines");
@@ -289,7 +344,7 @@ app.post("/hatch/:id/advance", async (c) => {
             depth: phaseInfo.refinement.depth,
           }
         : undefined;
-      await executeEngineSSEStream(s as any, projectId, phaseInfo.engine!, project, { refinement });
+      await executeEngineSSEStream(s as any, projectId, phaseInfo.engine!, project, { refinement, authorNotes });
       releaseLock();
       return;
     }
@@ -767,6 +822,15 @@ app.post("/proposals/:id/reject", async (c) => {
   try {
     await orchestrator.rejectProposal(proposalId, body?.reason || "作者拒绝");
 
+    // 驳回后触发自动推进，让后端状态机决定下一步
+    const [proposal] = await db
+      .select({ projectId: aiProposals.projectId })
+      .from(aiProposals)
+      .where(eq(aiProposals.id, proposalId));
+    if (proposal?.projectId && scheduler) {
+      scheduler.onProposalsResolved(proposal.projectId).catch(() => {});
+    }
+
     return c.json({ success: true, proposalId, status: "rejected" });
   } catch (err: any) {
     return c.json({ error: err.message }, 400);
@@ -784,6 +848,11 @@ app.post("/proposals/:id/revise", async (c) => {
   try { body = await c.req.json(); } catch { /* ignore */ }
 
   const result = await orchestrator.reviseProposal(proposalId, body?.notes || "作者要求修改");
+
+  // 修改请求后触发自动推进，后端检测到 revision_requested 会自动重跑引擎
+  if (result.projectId && scheduler) {
+    scheduler.onProposalsResolved(result.projectId).catch(() => {});
+  }
 
   return c.json({
     success: result.success,
@@ -817,8 +886,7 @@ app.get("/proposals/:id/group", async (c) => {
     .from(aiProposals)
     .where(
       and(
-        eq(aiProposals.optionGroup, proposal.optionGroup),
-        eq(aiProposals.status, "pending")
+        eq(aiProposals.optionGroup, proposal.optionGroup)
       )
     )
     .orderBy(aiProposals.createdAt);
@@ -1381,6 +1449,13 @@ app.post("/hatch/:id/complete-phase/:phase", async (c) => {
     .where(eq(projectSettings.projectId, projectId));
 
   console.log(`[hatch] Project ${projectId} phase "${phase}" marked as completed`);
+
+  // 阶段确认后自动推进，前端无需二次调用 advance
+  if (scheduler) {
+    scheduler.onProposalsResolved(projectId).catch((err) => {
+      console.error(`[complete-phase] auto-advance failed:`, err.message);
+    });
+  }
 
   return c.json({
     success: true,

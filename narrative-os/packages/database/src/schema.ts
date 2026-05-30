@@ -350,6 +350,8 @@ export const aiProposals = pgTable(
     payload: jsonb("payload"),
     approvalMode: text("approval_mode", { enum: ["manual", "auto", "threshold"] }).notNull().default("manual"),
     impactScore: integer("impact_score"),
+    /** v4.0: MOU 频谱评估结果（JSON） */
+    mouSpectrum: jsonb("mou_spectrum"),
     status: text("status", { enum: ["pending", "approved", "rejected", "superseded", "revision_requested", "executing"] }).notNull().default("pending"),
     version: integer("version").notNull().default(1),
     parentId: uuid("parent_id"),

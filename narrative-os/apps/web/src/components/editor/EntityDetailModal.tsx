@@ -5,6 +5,7 @@ import { useAutoScroll } from '../../hooks/useAutoScroll'
 import type { SettingItem } from '../../stores/hatch'
 import EntityMarkdown from './EntityMarkdown'
 import { typeLabels, typeColors, formatKey } from '../../utils/entityConfig'
+import { SettingItemTimeline } from '../SettingItemTimeline'
 
 interface EntityDetailModalProps {
   open: boolean
@@ -348,6 +349,12 @@ export default function EntityDetailModal({ open, item, allEntities, projectId, 
           )}
         </div>
       </div>
+
+      {/* ── Divider ── */}
+      <div style={{ height: 1, background: 'var(--glass-border)', marginBottom: 4 }} />
+
+      {/* ── Change Timeline ── */}
+      {item && <SettingItemTimeline itemId={item.id} />}
 
       {/* ── Divider ── */}
       <div style={{ height: 1, background: 'var(--glass-border)', marginBottom: 4 }} />

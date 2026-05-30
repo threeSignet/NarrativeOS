@@ -18,14 +18,14 @@ export function WorldSnapshotHistory({ projectId }: { projectId: string }) {
   const [diff, setDiff] = useState<any>(null)
 
   useEffect(() => {
-    apiFetch(`/api/projects/${projectId}/snapshots`).then((data: any) => {
+    apiFetch(`/projects/${projectId}/snapshots`).then((data: any) => {
       setSnapshots(data.snapshots || [])
     })
   }, [projectId])
 
   const compare = async () => {
     if (!selectedA || !selectedB) return
-    const result = await apiPost('/api/world/snapshots/compare', {
+    const result = await apiPost('/world/snapshots/compare', {
       snapshotIdA: selectedA,
       snapshotIdB: selectedB,
     })

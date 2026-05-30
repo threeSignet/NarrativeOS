@@ -5,6 +5,7 @@ import { bus } from "./event-bus";
 import { fuzzyMatchInCandidates } from "./shared";
 import { findHandler } from "./handlers";
 import { validateCrossReferences, type BrokenReference } from "./validators/cross-engine-validator";
+import { evaluateMouSpectrum, canAutoApprove } from "./validators/mou-spectrum-evaluator";
 import type { HandlerResult } from "./handlers";
 import { WORLD_ENGINES } from "@narrative-os/engines";
 
@@ -186,7 +187,17 @@ export class Orchestrator {
         console.warn(`[cross-ref] ${sourceNode}: ✅ 自动修复了 ${autoFixedCount} 个引用`);
       }
 
+      // v4.0: MOU 频谱评估
+      const spectrumEvaluations = await evaluateMouSpectrum(projectId, groupProposals, sourceNode);
+
       for (const proposal of groupProposals) {
+        const evaluation = spectrumEvaluations.get(proposal.title);
+        const approvalMode = evaluation && canAutoApprove(evaluation) ? "threshold" : "manual";
+
+        if (evaluation) {
+          console.log(`[spectrum] ${sourceNode} → "${proposal.title}": ${evaluation.band} (${evaluation.overallScore}分)${evaluation.checkpointTriggered ? ' [检查点]' : ''}`);
+        }
+
         await db.transaction(async (tx) => {
           const [inserted] = await tx
             .insert(aiProposals)
@@ -203,7 +214,9 @@ export class Orchestrator {
               sourceNode,
               pipeline: result.pipeline || null,
               optionGroup,
-              approvalMode: "manual",
+              approvalMode,
+              impactScore: evaluation?.overallScore ?? null,
+              mouSpectrum: evaluation || null,
               status: "pending",
             })
             .returning({ id: aiProposals.id });

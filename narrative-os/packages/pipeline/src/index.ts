@@ -17,3 +17,7 @@ export type { ProposalHandler, ProposalHandlerContext, HandlerResult, Notificati
 // ── Pipeline configs ──
 export { HATCHING_SEQUENCE, findNextHatchingEngine, isHatchingComplete } from "./pipelines/hatching";
 export type { EngineStatus, PipelineState } from "./pipelines/hatching";
+
+// ── Validators ──
+export { evaluateMouSpectrum, canAutoApprove, getSpectrumThresholds } from "./validators/mou-spectrum-evaluator";
+export type { SpectrumEvaluation, SpectrumDimensions } from "./validators/mou-spectrum-evaluator";

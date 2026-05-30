@@ -4,6 +4,7 @@ import { getEngine } from "@narrative-os/engines";
 import { Orchestrator } from "./orchestrator";
 import { bus } from "./event-bus";
 import type { EngineContext } from "@narrative-os/engines";
+import type { SpectrumEvaluation } from "./validators/mou-spectrum-evaluator";
 import { getRunnableEngines, HATCH_ENGINES, SCALE_CHAIN, loadProjectScales, getProjectChildScale } from "@narrative-os/engines";
 
 export type SchedulerEventType =
@@ -668,6 +669,37 @@ export class EngineScheduler {
           engineName
         );
         console.log(`[scheduler] ${engineName} staged ${proposalIds.length} proposals`);
+
+        // v4.0: full_auto 模式下根据 MOU 频谱评估自动审批
+        if (proposalIds.length > 0) {
+          const [projectMode] = await db
+            .select({ collaborationMode: projects.collaborationMode })
+            .from(projects)
+            .where(eq(projects.id, projectId));
+          if (projectMode?.collaborationMode === "full_auto") {
+            // 读取频谱评估结果
+            const [firstProposal] = await db
+              .select({ mouSpectrum: aiProposals.mouSpectrum })
+              .from(aiProposals)
+              .where(eq(aiProposals.id, proposalIds[0]));
+            const spectrum = firstProposal?.mouSpectrum as SpectrumEvaluation | null;
+
+            if (spectrum && spectrum.checkpointTriggered) {
+              console.log(`[scheduler] full_auto: 检查点引擎 ${engineName} 触发暂停，等待作者确认`);
+            } else if (spectrum && (spectrum.band === "green" || spectrum.band === "yellow")) {
+              try {
+                console.log(`[scheduler] full_auto: 频谱 ${spectrum.band} (${spectrum.overallScore}分)，自动审批提案 ${proposalIds[0]}`);
+                await this.orchestrator.approveProposal(proposalIds[0], `全自动模式自动审批（频谱: ${spectrum.band} ${spectrum.overallScore}分）`);
+                // 自动推进下一个引擎
+                await this.onProposalsResolved(projectId);
+              } catch (err: any) {
+                console.error(`[scheduler] full_auto auto-approve failed:`, err.message);
+              }
+            } else {
+              console.log(`[scheduler] full_auto: 频谱 ${spectrum?.band || "unknown"}，不满足自动审批条件，等待作者确认`);
+            }
+          }
+        }
       }
 
       this.emit({ type: "engine_done", projectId, node: engineName, payload: { engine: engineName, proposalCount: proposalIds.length } });

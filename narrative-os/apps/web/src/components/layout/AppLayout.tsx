@@ -21,7 +21,7 @@ export default function AppLayout({ project, activePanel, onPanelClick, onOpenPr
         />
         {children}
       </div>
-      <BottomBar onOpenProposalList={onOpenProposalList} />
+      <BottomBar projectId={project?.id} onOpenProposalList={onOpenProposalList} />
     </div>
   )
 }

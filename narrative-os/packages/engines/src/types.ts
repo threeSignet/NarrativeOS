@@ -18,6 +18,8 @@ export interface EngineContext {
   creationCharter?: CreationCharter;
   /** v4.0: 当前协作模式（项目级覆盖后的实际模式） */
   collaborationMode?: "plan" | "auto" | "full_auto";
+  /** v4.0: 计划模式下作者输入的意图/想法 */
+  authorNotes?: string;
 }
 
 /**

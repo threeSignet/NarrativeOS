@@ -1,5 +1,5 @@
 // narrative-os/apps/web/src/components/CharterForm.tsx
-import { useState, useCallback, useEffect } from 'react'
+import { useState, useCallback, useEffect, useRef } from 'react'
 import { apiFetch } from '../api/client'
 
 interface CharterFormProps {
@@ -35,33 +35,72 @@ const DEFAULT_CHARTER = {
   lastModifiedAt: new Date().toISOString(),
 }
 
+// Simple debounce hook
+function useDebouncedCallback<T extends (...args: any[]) => any>(
+  callback: T,
+  delay: number
+) {
+  const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  return useCallback(
+    (...args: Parameters<T>) => {
+      if (timerRef.current) clearTimeout(timerRef.current)
+      timerRef.current = setTimeout(() => callback(...args), delay)
+    },
+    [callback, delay]
+  )
+}
+
 export function CharterForm({ projectId }: CharterFormProps) {
   const [charter, setCharter] = useState<any>(null)
   const [saving, setSaving] = useState(false)
+  const [error, setError] = useState<string | null>(null)
 
   useEffect(() => {
-    apiFetch(`/api/projects/${projectId}/charter`).then((data: any) => {
-      setCharter(data.charter || DEFAULT_CHARTER)
-    })
+    setError(null)
+    apiFetch(`/projects/${projectId}/charter`)
+      .then((data: any) => {
+        setCharter(data.charter || DEFAULT_CHARTER)
+      })
+      .catch((err) => {
+        setError(`加载创作宪章失败: ${err.message}`)
+        setCharter(DEFAULT_CHARTER)
+      })
   }, [projectId])
 
-  const saveCharter = useCallback(
+  const doSave = useCallback(
     async (nextCharter: any) => {
       setSaving(true)
+      setError(null)
       nextCharter.lastModifiedAt = new Date().toISOString()
-      await apiFetch(`/api/projects/${projectId}/charter`, { method: 'PATCH', body: JSON.stringify({ charter: nextCharter }) })
-      setSaving(false)
+      try {
+        await apiFetch(`/projects/${projectId}/charter`, {
+          method: 'PATCH',
+          body: JSON.stringify({ charter: nextCharter }),
+        })
+      } catch (err: any) {
+        setError(`保存失败: ${err.message}`)
+      } finally {
+        setSaving(false)
+      }
     },
     [projectId]
   )
 
+  const saveCharter = useDebouncedCallback(doSave, 500)
+
+  if (error && !charter) {
+    return <div className="p-4 text-red-500">{error}</div>
+  }
   if (!charter) return <div className="p-4 text-gray-500">加载中...</div>
 
   return (
     <div className="charter-form space-y-6 p-4">
       <div className="flex items-center justify-between">
         <h2 className="text-xl font-bold text-gray-900">五维度创作宪章</h2>
-        {saving && <span className="text-sm text-gray-500">保存中...</span>}
+        <div className="flex items-center gap-2">
+          {saving && <span className="text-sm text-gray-500">保存中...</span>}
+          {error && <span className="text-sm text-red-500">{error}</span>}
+        </div>
       </div>
 
       <section>
@@ -84,11 +123,11 @@ export function CharterForm({ projectId }: CharterFormProps) {
         <div className="grid grid-cols-3 gap-2 mb-2">
           <select
             className="border rounded-md p-2"
-            value={charter.mainLineBlueprint.structureMode}
+            value={charter.mainLineBlueprint?.structureMode || 'three_act'}
             onChange={(e) => {
               const next = {
                 ...charter,
-                mainLineBlueprint: { ...charter.mainLineBlueprint, structureMode: e.target.value },
+                mainLineBlueprint: { ...(charter.mainLineBlueprint || DEFAULT_CHARTER.mainLineBlueprint), structureMode: e.target.value },
               }
               setCharter(next)
               saveCharter(next)
@@ -103,11 +142,11 @@ export function CharterForm({ projectId }: CharterFormProps) {
             type="number"
             className="border rounded-md p-2"
             placeholder="总卷数"
-            value={charter.mainLineBlueprint.totalVolumes}
+            value={charter.mainLineBlueprint?.totalVolumes || 3}
             onChange={(e) => {
               const next = {
                 ...charter,
-                mainLineBlueprint: { ...charter.mainLineBlueprint, totalVolumes: parseInt(e.target.value) || 1 },
+                mainLineBlueprint: { ...(charter.mainLineBlueprint || DEFAULT_CHARTER.mainLineBlueprint), totalVolumes: parseInt(e.target.value) || 1 },
               }
               setCharter(next)
               saveCharter(next)
@@ -117,11 +156,11 @@ export function CharterForm({ projectId }: CharterFormProps) {
             type="number"
             className="border rounded-md p-2"
             placeholder="总章数"
-            value={charter.mainLineBlueprint.totalChapters}
+            value={charter.mainLineBlueprint?.totalChapters || 100}
             onChange={(e) => {
               const next = {
                 ...charter,
-                mainLineBlueprint: { ...charter.mainLineBlueprint, totalChapters: parseInt(e.target.value) || 1 },
+                mainLineBlueprint: { ...(charter.mainLineBlueprint || DEFAULT_CHARTER.mainLineBlueprint), totalChapters: parseInt(e.target.value) || 1 },
               }
               setCharter(next)
               saveCharter(next)
@@ -132,14 +171,14 @@ export function CharterForm({ projectId }: CharterFormProps) {
 
       <section>
         <label className="block font-medium mb-1 text-gray-700">核心角色</label>
-        {charter.coreCharacters.map((char: any, idx: number) => (
+        {(charter.coreCharacters || []).map((char: any, idx: number) => (
           <div key={idx} className="border p-3 rounded-md mb-2 bg-white">
             <input
               className="w-full mb-1 border rounded-md p-2"
               placeholder="角色名"
-              value={char.name}
+              value={char.name || ''}
               onChange={(e) => {
-                const chars = [...charter.coreCharacters]
+                const chars = [...(charter.coreCharacters || [])]
                 chars[idx] = { ...char, name: e.target.value }
                 const next = { ...charter, coreCharacters: chars }
                 setCharter(next)
@@ -149,9 +188,9 @@ export function CharterForm({ projectId }: CharterFormProps) {
             <textarea
               className="w-full border rounded-md p-2"
               placeholder="性格描述"
-              value={char.personality}
+              value={char.personality || ''}
               onChange={(e) => {
-                const chars = [...charter.coreCharacters]
+                const chars = [...(charter.coreCharacters || [])]
                 chars[idx] = { ...char, personality: e.target.value }
                 const next = { ...charter, coreCharacters: chars }
                 setCharter(next)
@@ -165,10 +204,7 @@ export function CharterForm({ projectId }: CharterFormProps) {
           onClick={() => {
             const next = {
               ...charter,
-              coreCharacters: [
-                ...charter.coreCharacters,
-                { name: '', role: 'protagonist', archetype: '', personality: '', motivation: '', growthArc: '' },
-              ],
+              coreCharacters: [...(charter.coreCharacters || []), { name: '', role: 'protagonist', archetype: '', personality: '', motivation: '', growthArc: '' }],
             }
             setCharter(next)
             saveCharter(next)
@@ -180,13 +216,13 @@ export function CharterForm({ projectId }: CharterFormProps) {
 
       <section>
         <label className="block font-medium mb-1 text-gray-700">世界法则</label>
-        {charter.worldRules.map((rule: any, idx: number) => (
+        {(charter.worldRules || []).map((rule: any, idx: number) => (
           <div key={idx} className="flex gap-2 mb-1">
             <select
               className="border rounded-md p-2"
-              value={rule.category}
+              value={rule.category || 'physics'}
               onChange={(e) => {
-                const rules = [...charter.worldRules]
+                const rules = [...(charter.worldRules || [])]
                 rules[idx] = { ...rule, category: e.target.value }
                 const next = { ...charter, worldRules: rules }
                 setCharter(next)
@@ -202,9 +238,9 @@ export function CharterForm({ projectId }: CharterFormProps) {
             <input
               className="flex-1 border rounded-md p-2"
               placeholder="法则描述"
-              value={rule.rule}
+              value={rule.rule || ''}
               onChange={(e) => {
-                const rules = [...charter.worldRules]
+                const rules = [...(charter.worldRules || [])]
                 rules[idx] = { ...rule, rule: e.target.value }
                 const next = { ...charter, worldRules: rules }
                 setCharter(next)
@@ -218,7 +254,7 @@ export function CharterForm({ projectId }: CharterFormProps) {
           onClick={() => {
             const next = {
               ...charter,
-              worldRules: [...charter.worldRules, { category: 'physics', rule: '', implications: [] }],
+              worldRules: [...(charter.worldRules || []), { category: 'physics', rule: '', implications: [] }],
             }
             setCharter(next)
             saveCharter(next)
@@ -234,11 +270,11 @@ export function CharterForm({ projectId }: CharterFormProps) {
           <input
             className="border rounded-md p-2"
             placeholder="写作风格"
-            value={charter.narrativeRules.writingStyle}
+            value={charter.narrativeRules?.writingStyle || ''}
             onChange={(e) => {
               const next = {
                 ...charter,
-                narrativeRules: { ...charter.narrativeRules, writingStyle: e.target.value },
+                narrativeRules: { ...(charter.narrativeRules || DEFAULT_CHARTER.narrativeRules), writingStyle: e.target.value },
               }
               setCharter(next)
               saveCharter(next)
@@ -246,11 +282,11 @@ export function CharterForm({ projectId }: CharterFormProps) {
           />
           <select
             className="border rounded-md p-2"
-            value={charter.narrativeRules.pace}
+            value={charter.narrativeRules?.pace || 'medium'}
             onChange={(e) => {
               const next = {
                 ...charter,
-                narrativeRules: { ...charter.narrativeRules, pace: e.target.value },
+                narrativeRules: { ...(charter.narrativeRules || DEFAULT_CHARTER.narrativeRules), pace: e.target.value },
               }
               setCharter(next)
               saveCharter(next)

@@ -1,13 +1,14 @@
 import { memo } from 'react'
-import { Eye, Compass } from 'lucide-react'
+import { Eye, Compass, Camera } from 'lucide-react'
 import type { EngineInfo, SettingItem } from '../../stores/hatch'
 import { engineConfig } from '../../utils/engineConfig'
 
-const WorldPanel = memo(function WorldPanel({ engines, settingItems, onOpenEngineView, onOpenWorldView, searchQuery }: {
+const WorldPanel = memo(function WorldPanel({ engines, settingItems, onOpenEngineView, onOpenWorldView, onOpenSnapshotHistory, searchQuery }: {
   engines: EngineInfo[]
   settingItems: SettingItem[]
   onOpenEngineView: (engineType: string, engineLabel: string) => void
   onOpenWorldView: () => void
+  onOpenSnapshotHistory?: () => void
   searchQuery: string
 }) {
   const engineMap = Object.fromEntries(engines.map((e) => [e.type, e]))
@@ -109,6 +110,33 @@ const WorldPanel = memo(function WorldPanel({ engines, settingItems, onOpenEngin
           <div style={{ fontSize: 10, color: 'var(--text-muted)', marginTop: 1 }}>查看所有世界设定的地图全貌</div>
         </div>
       </button>
+
+      {/* Snapshot History button */}
+      {onOpenSnapshotHistory && (
+        <button onClick={onOpenSnapshotHistory} style={{
+          display: 'flex', alignItems: 'center', gap: 10,
+          width: '100%', padding: '12px 14px', borderRadius: 10,
+          border: '1px solid rgba(134,239,172,0.15)',
+          background: 'rgba(134,239,172,0.06)',
+          cursor: 'pointer', fontFamily: 'var(--font-ui)',
+          transition: 'all var(--duration) var(--ease)',
+        }}
+          onMouseEnter={(e) => { e.currentTarget.style.background = 'rgba(134,239,172,0.12)' }}
+          onMouseLeave={(e) => { e.currentTarget.style.background = 'rgba(134,239,172,0.06)' }}
+        >
+          <div style={{
+            width: 34, height: 34, borderRadius: 8,
+            background: 'rgba(134,239,172,0.12)', color: 'var(--accent-mint)',
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+          }}>
+            <Camera size={18} />
+          </div>
+          <div style={{ textAlign: 'left', flex: 1 }}>
+            <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-primary)' }}>世界快照</div>
+            <div style={{ fontSize: 10, color: 'var(--text-muted)', marginTop: 1 }}>查看和对比世界状态历史</div>
+          </div>
+        </button>
+      )}
     </div>
   )
 })

@@ -1,12 +1,14 @@
 import { useState } from 'react'
 import {
-  ChevronRight, Settings, Brain, Zap, PenLine,
+  ChevronRight, Settings, Brain, Zap, PenLine, ScrollText,
 } from 'lucide-react'
 import type { Project } from '../../stores/projects'
 
-export default function SettingsPanel({ project, onUpdate }: {
+export default function SettingsPanel({ project, onUpdate, onOpenCharter, onClosePanel }: {
   project: Project
   onUpdate: (updates: Record<string, any>) => Promise<void>
+  onOpenCharter?: () => void
+  onClosePanel?: () => void
 }) {
   const [section, setSection] = useState<'main' | 'model' | 'api'>('main')
   const [editField, setEditField] = useState<string | null>(null)
@@ -78,9 +80,10 @@ export default function SettingsPanel({ project, onUpdate }: {
   }
 
   const mainItems = [
-    { label: '项目设置', icon: <Settings size={16} />, desc: '写作风格、目标字数等', section: 'model' as const },
-    { label: '模型配置', icon: <Brain size={16} />, desc: 'AI 模型和生成参数', section: 'model' as const },
-    { label: 'API 密钥', icon: <Zap size={16} />, desc: 'LLM 供应商配置', section: 'api' as const },
+    { label: '项目设置', icon: <Settings size={16} />, desc: '写作风格、目标字数等', section: 'model' as const, action: undefined as (() => void) | undefined },
+    { label: '创作宪章', icon: <ScrollText size={16} />, desc: '五维度创作意图定义', section: 'model' as const, action: onOpenCharter },
+    { label: '模型配置', icon: <Brain size={16} />, desc: 'AI 模型和生成参数', section: 'model' as const, action: undefined },
+    { label: 'API 密钥', icon: <Zap size={16} />, desc: 'LLM 供应商配置', section: 'api' as const, action: undefined },
   ]
 
   return (
@@ -93,8 +96,8 @@ export default function SettingsPanel({ project, onUpdate }: {
         </div>
       </div>
 
-      {mainItems.map(({ label, icon, desc, section: sec }) => (
-        <div key={label} onClick={() => setSection(sec)}
+      {mainItems.map(({ label, icon, desc, section: sec, action }) => (
+        <div key={label} onClick={() => { if (action) { action(); onClosePanel?.() } else { setSection(sec) } }}
           style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '10px 12px', borderRadius: 10, cursor: 'pointer', transition: 'all var(--duration) var(--ease)' }}
           onMouseEnter={(e) => { e.currentTarget.style.background = 'rgba(255,255,255,0.06)' }}
           onMouseLeave={(e) => { e.currentTarget.style.background = 'transparent' }}

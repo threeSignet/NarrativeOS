@@ -1,14 +1,23 @@
-import { useMemo } from 'react'
+import { useMemo, useState, useRef, useEffect } from 'react'
 import {
-  Bell, Globe2, Brain,
+  Bell, Globe2, Brain, ChevronDown, Shield, Zap, Bot,
 } from 'lucide-react'
 import { useHatchStore } from '../../stores/hatch'
 import { useCompanionStore } from '../../stores/companion'
+import { useProjectStore } from '../../stores/projects'
 import { getEngineDisplayLabel } from '../../utils/engineConfig'
 import TaskBar from '../ui/TaskBar'
 import LLMStatusPopup from '../editor/LLMStatusPopup'
+import { apiFetch } from '../../api/client'
 
-export default function BottomBar({ onOpenProposalList }: {
+const MODE_CONFIG: Record<string, { label: string; icon: React.ReactNode; color: string; desc: string }> = {
+  plan: { label: '计划模式', icon: <Shield size={10} />, color: 'var(--accent-ice)', desc: '每个引擎运行前需手动确认' },
+  auto: { label: '自动模式', icon: <Zap size={10} />, color: 'var(--accent-warm)', desc: '引擎自动运行，提案需审批' },
+  full_auto: { label: '全自动', icon: <Bot size={10} />, color: 'var(--accent-mint)', desc: '引擎自动运行，提案自动审批' },
+}
+
+export default function BottomBar({ projectId, onOpenProposalList }: {
+  projectId?: string
   onOpenProposalList: () => void
 }) {
   const phase = useHatchStore((s) => s.phase)
@@ -17,6 +26,42 @@ export default function BottomBar({ onOpenProposalList }: {
   const currentEngine = useHatchStore((s) => s.currentEngine)
   const refinementContext = useHatchStore((s) => s._refinementContext)
   const companionStreaming = useCompanionStore((s) => s.isStreaming)
+
+  // ── v4.0 协作模式切换 ──
+  const projects = useProjectStore((s) => s.projects)
+  const currentProject = projects.find((p) => p.id === projectId)
+  const currentMode = (currentProject as any)?.collaborationMode || 'auto'
+  const [modeMenuOpen, setModeMenuOpen] = useState(false)
+  const modeMenuRef = useRef<HTMLDivElement>(null)
+
+  useEffect(() => {
+    const handleClickOutside = (e: MouseEvent) => {
+      if (modeMenuRef.current && !modeMenuRef.current.contains(e.target as Node)) {
+        setModeMenuOpen(false)
+      }
+    }
+    document.addEventListener('mousedown', handleClickOutside)
+    return () => document.removeEventListener('mousedown', handleClickOutside)
+  }, [])
+
+  const switchMode = async (mode: string) => {
+    if (!projectId) return
+    try {
+      await apiFetch(`/projects/${projectId}/mode`, {
+        method: 'PATCH',
+        body: JSON.stringify({ mode }),
+      })
+      // 更新本地状态
+      const store = useProjectStore.getState()
+      store.projects = store.projects.map((p) =>
+        p.id === projectId ? { ...p, collaborationMode: mode } : p
+      )
+      useProjectStore.setState({ projects: [...store.projects] })
+    } catch (err: any) {
+      console.error('[BottomBar] 切换协作模式失败:', err.message)
+    }
+    setModeMenuOpen(false)
+  }
 
   const pendingCount = proposals.filter((p) => p.status === 'pending').length
   // WAITING 阶段细分：有引擎在跑但无待审批提案 = 实际在执行
@@ -118,6 +163,61 @@ export default function BottomBar({ onOpenProposalList }: {
           <Brain size={10} />
           <span>记忆 0</span>
         </div>
+        <span style={{ width: 1, height: 12, background: 'var(--glass-border)' }} />
+
+        {/* ── v4.0 协作模式切换 ── */}
+        {projectId && (
+          <div ref={modeMenuRef} style={{ position: 'relative', flexShrink: 0 }}>
+            <div
+              onClick={() => setModeMenuOpen((v) => !v)}
+              title={MODE_CONFIG[currentMode]?.desc || ''}
+              style={{
+                display: 'flex', alignItems: 'center', gap: 3, cursor: 'pointer',
+                padding: '1px 6px', borderRadius: 3,
+                transition: 'background var(--duration) var(--ease)',
+                color: MODE_CONFIG[currentMode]?.color || 'var(--text-muted)',
+              }}
+              onMouseEnter={(e) => { e.currentTarget.style.background = 'rgba(255,255,255,0.06)' }}
+              onMouseLeave={(e) => { e.currentTarget.style.background = 'transparent' }}
+            >
+              {MODE_CONFIG[currentMode]?.icon}
+              <span style={{ fontSize: 10, fontWeight: 500 }}>{MODE_CONFIG[currentMode]?.label || currentMode}</span>
+              <ChevronDown size={8} style={{ opacity: 0.6 }} />
+            </div>
+            {modeMenuOpen && (
+              <div style={{
+                position: 'absolute', bottom: 'calc(100% + 4px)', right: 0,
+                minWidth: 160,
+                background: 'rgba(12,12,22,0.95)', backdropFilter: 'blur(20px)',
+                border: '1px solid var(--glass-border)', borderRadius: 8,
+                padding: '6px 0', zIndex: 200,
+                boxShadow: '0 4px 24px rgba(0,0,0,0.4)',
+              }}>
+                {Object.entries(MODE_CONFIG).map(([key, cfg]) => (
+                  <div
+                    key={key}
+                    onClick={() => switchMode(key)}
+                    style={{
+                      display: 'flex', alignItems: 'center', gap: 8,
+                      padding: '8px 14px', cursor: 'pointer',
+                      background: currentMode === key ? 'rgba(255,255,255,0.06)' : 'transparent',
+                      transition: 'background var(--duration) var(--ease)',
+                    }}
+                    onMouseEnter={(e) => { if (currentMode !== key) e.currentTarget.style.background = 'rgba(255,255,255,0.04)' }}
+                    onMouseLeave={(e) => { if (currentMode !== key) e.currentTarget.style.background = 'transparent' }}
+                  >
+                    <span style={{ color: cfg.color, display: 'flex', alignItems: 'center' }}>{cfg.icon}</span>
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
+                      <span style={{ fontSize: 12, fontWeight: 500, color: 'var(--text-primary)' }}>{cfg.label}</span>
+                      <span style={{ fontSize: 10, color: 'var(--text-muted)' }}>{cfg.desc}</span>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
+
         <span style={{ width: 1, height: 12, background: 'var(--glass-border)' }} />
         <div style={{ display: 'flex', alignItems: 'center', gap: 3 }}>
           <div style={{ width: 5, height: 5, borderRadius: '50%', background: 'var(--accent-mint)' }} />

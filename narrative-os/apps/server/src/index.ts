@@ -40,9 +40,9 @@ app.route("/brainstorm", brainstorm);
 app.route("/companion", companion);
 app.route("/outline", outline);
 app.route("/vector", vector);
-app.route("/api", charterRoutes);
-app.route("/api", snapshotRoutes);
-app.route("/api", timelineRoutes);
+app.route("/", charterRoutes);
+app.route("/", snapshotRoutes);
+app.route("/", timelineRoutes);
 
 // ── WebSocket setup ──
 const { injectWebSocket, upgradeWebSocket } = createNodeWebSocket({ app });

@@ -314,6 +314,23 @@ function PipelineBlock({ label, icon, content }: { label: string; icon: React.Re
   )
 }
 
+/** 频谱维度分数条 */
+function DimensionBar({ label, score, color }: { label: string; score: number; color: string }) {
+  return (
+    <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+      <span style={{ fontSize: 11, color: 'var(--text-muted)', width: 60, flexShrink: 0 }}>{label}</span>
+      <div style={{ flex: 1, height: 6, borderRadius: 3, background: 'rgba(255,255,255,0.05)', overflow: 'hidden' }}>
+        <div style={{
+          width: `${score}%`, height: '100%', borderRadius: 3,
+          background: color,
+          transition: 'width 0.5s ease',
+        }} />
+      </div>
+      <span style={{ fontSize: 11, color: 'var(--text-secondary)', fontFamily: 'var(--font-mono)', width: 28, textAlign: 'right' }}>{score}</span>
+    </div>
+  )
+}
+
 export default function MOUModal({ open, proposal, siblings, onClose, onApprove, onReject, onRevise: _onRevise, onDiscuss, stageTitle, error }: MOUModalProps) {
   if (!proposal) return null
 
@@ -442,6 +459,70 @@ export default function MOUModal({ open, proposal, siblings, onClose, onApprove,
       <div style={{ fontSize: 12, color: 'var(--text-muted)', marginBottom: 20 }}>
         来自 {active.sourceNode || 'AI Engine'} · {new Date(active.createdAt).toLocaleString('zh-CN')}
       </div>
+
+      {/* ── MOU Spectrum Evaluation ── */}
+      {active.mouSpectrum && (
+        <div style={{ marginBottom: 20 }}>
+          <SectionLabel icon={<BarChart3 size={12} />}>MOU 频谱评估</SectionLabel>
+          <div style={{
+            padding: '14px 16px', borderRadius: 10,
+            background: active.mouSpectrum.band === 'green' ? 'rgba(134,239,172,0.04)' : active.mouSpectrum.band === 'yellow' ? 'rgba(253,230,138,0.04)' : 'rgba(252,165,165,0.04)',
+            border: `1px solid ${active.mouSpectrum.band === 'green' ? 'rgba(134,239,172,0.15)' : active.mouSpectrum.band === 'yellow' ? 'rgba(253,230,138,0.15)' : 'rgba(252,165,165,0.15)'}`,
+            display: 'flex', flexDirection: 'column', gap: 10,
+          }}>
+            {/* 总分和频谱带 */}
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                <span style={{
+                  fontSize: 20, fontWeight: 700, fontFamily: 'var(--font-mono)',
+                  color: active.mouSpectrum.band === 'green' ? 'var(--accent-mint)' : active.mouSpectrum.band === 'yellow' ? 'var(--accent-warm)' : 'var(--accent-rose)',
+                }}>
+                  {active.mouSpectrum.overallScore}
+                </span>
+                <span style={{
+                  fontSize: 11, fontWeight: 600, padding: '2px 8px', borderRadius: 4,
+                  background: active.mouSpectrum.band === 'green' ? 'rgba(134,239,172,0.12)' : active.mouSpectrum.band === 'yellow' ? 'rgba(253,230,138,0.12)' : 'rgba(252,165,165,0.12)',
+                  color: active.mouSpectrum.band === 'green' ? 'var(--accent-mint)' : active.mouSpectrum.band === 'yellow' ? 'var(--accent-warm)' : 'var(--accent-rose)',
+                }}>
+                  {active.mouSpectrum.band === 'green' ? '绿灯 — 可自动审批' : active.mouSpectrum.band === 'yellow' ? '黄灯 — 建议确认' : '红灯 — 必须审批'}
+                </span>
+                {active.mouSpectrum.checkpointTriggered && (
+                  <span style={{
+                    fontSize: 11, fontWeight: 600, padding: '2px 8px', borderRadius: 4,
+                    background: 'rgba(147,197,253,0.12)', color: 'var(--accent-ice)',
+                  }}>
+                    检查点
+                  </span>
+                )}
+              </div>
+              <span style={{ fontSize: 11, color: 'var(--text-muted)' }}>
+                风险: {active.mouSpectrum.riskLevel === 'low' ? '低' : active.mouSpectrum.riskLevel === 'medium' ? '中' : '高'}
+              </span>
+            </div>
+
+            {/* 维度分数 */}
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: 8 }}>
+              <DimensionBar label="宪章一致性" score={active.mouSpectrum.dimensions.charterAlignment} color="var(--accent-ice)" />
+              <DimensionBar label="设定冲突" score={active.mouSpectrum.dimensions.worldConsistency} color="var(--accent-mint)" />
+              <DimensionBar label="完整性" score={active.mouSpectrum.dimensions.completeness} color="var(--accent-warm)" />
+              <DimensionBar label="尺度一致" score={active.mouSpectrum.dimensions.scaleConsistency} color="var(--accent-violet)" />
+            </div>
+
+            {/* 评估说明 */}
+            {active.mouSpectrum.reasoning && (
+              <p style={{ fontSize: 12, color: 'var(--text-muted)', lineHeight: 1.5, margin: 0 }}>
+                {active.mouSpectrum.reasoning}
+              </p>
+            )}
+
+            {active.mouSpectrum.checkpointTriggered && (
+              <p style={{ fontSize: 12, color: 'var(--accent-ice)', lineHeight: 1.5, margin: 0 }}>
+                「{active.mouSpectrum.checkpointEngine}」是关键节点，即使在全自动模式下也需要作者确认。
+              </p>
+            )}
+          </div>
+        </div>
+      )}
 
       {/* ── AI Reasoning ── */}
       {active.reasoning && (

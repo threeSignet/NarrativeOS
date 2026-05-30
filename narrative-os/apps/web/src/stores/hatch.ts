@@ -2,8 +2,6 @@ import { create } from 'zustand'
 import { apiFetch, apiPost } from '../api/client'
 import { readSSEStream } from '../utils/sse'
 
-const OUTLINE_ENGINES = new Set(['outline-generator', 'volume-outline', 'chapter-outline'])
-
 // Lightweight real-time token estimator (client side)
 // CJK ~1.5 chars/token, other ~3.5 chars/token
 function estimateTokens(text: string): number {
@@ -46,6 +44,21 @@ export interface Proposal {
   approvedAt?: string
   pipeline?: PipelineSnapshot
   optionGroup?: string | null
+  /** v4.0: MOU 频谱评估结果 */
+  mouSpectrum?: {
+    overallScore: number
+    band: 'green' | 'yellow' | 'red'
+    dimensions: {
+      charterAlignment: number
+      worldConsistency: number
+      completeness: number
+      scaleConsistency: number
+    }
+    riskLevel: 'low' | 'medium' | 'high'
+    reasoning: string
+    checkpointTriggered: boolean
+    checkpointEngine?: string
+  } | null
   createdAt: string
 }
 
@@ -147,7 +160,7 @@ export interface EngineInfo {
   hasPending: boolean
 }
 
-type HatchPhase = 'idle' | 'streaming' | 'waiting' | 'world_complete' | 'complete' | 'waiting_phase_confirmation'
+type HatchPhase = 'idle' | 'streaming' | 'waiting' | 'world_complete' | 'complete' | 'waiting_phase_confirmation' | 'waiting_author_input'
 
 interface HatchStore {
   phase: HatchPhase
@@ -179,14 +192,17 @@ interface HatchStore {
   currentProposalGroup: Proposal[]
   currentOptionGroup: string | null
   selectedOptionId: string | null
+  // v4.0: plan 模式下等待作者输入的状态
+  waitingAuthorInputEngine: string | null
+  waitingAuthorInputLabel: string | null
+  waitingAuthorInputMessage: string | null
 
   fetchProposals: (projectId: string) => Promise<void>
   fetchSettings: (projectId: string) => Promise<void>
   fetchEngines: (projectId: string) => Promise<void>
-  advanceHatching: (projectId: string) => Promise<void>
+  advanceHatching: (projectId: string, authorNotes?: string) => Promise<void>
   startHatching: (projectId: string) => Promise<void>
   startStudioPhase: (projectId: string) => Promise<void>
-  runEngine: (projectId: string, engine: string) => Promise<void>
   completePhase: (projectId: string, phase: string) => Promise<void>
   approveProposal: (proposalId: string, projectId: string) => Promise<void>
   rejectProposal: (proposalId: string) => Promise<void>
@@ -235,6 +251,9 @@ export const useHatchStore = create<HatchStore>((set, get) => ({
   currentProposalGroup: [],
   currentOptionGroup: null,
   selectedOptionId: null,
+  waitingAuthorInputEngine: null,
+  waitingAuthorInputLabel: null,
+  waitingAuthorInputMessage: null,
 
   registerLLMJob: (jobId, jobLabel, status) => {
     const jobs = { ...get().activeLLMJobs }
@@ -344,22 +363,13 @@ export const useHatchStore = create<HatchStore>((set, get) => ({
         )?.[0]
         const jobId = existingJobId || `engine:${engine}:ws`
         get().updateLLMJob(jobId, { active: false })
-        // 引擎完成后同步数据，根据 pending 情况决定下一步
+        // 同步数据和清理 UI 状态，phase 由 engine_started / phase_changed 事件驱动
         const projectId = get().proposals[0]?.projectId
         if (projectId) {
-          get().fetchProposals(projectId).then(() => {
-            const pending = get().proposals.filter((p) => p.status === 'pending')
-            if (pending.length > 0) {
-              set({ phase: 'waiting', autoPopupProposalId: pending[0].id, currentEngine: null, streamText: '', _refinementContext: null })
-            } else {
-              // 无 pending → 后端可能在运行下一引擎，不清 phase，等待新事件
-              set({ currentEngine: null, streamText: '', _refinementContext: null })
-            }
-          })
+          get().fetchProposals(projectId)
           get().fetchEngines(projectId)
-        } else {
-          set({ currentEngine: null, streamText: '', _refinementContext: null })
         }
+        set({ currentEngine: null, streamText: '', _refinementContext: null })
         break
       }
       case 'new_proposals':
@@ -455,6 +465,15 @@ export const useHatchStore = create<HatchStore>((set, get) => ({
             specialPhase = 'waiting_phase_confirmation'
             const targetPhase = (data.currentPhase as string) || null
             set({ phase: 'waiting_phase_confirmation', phaseConfirmationTarget: targetPhase })
+          } else if (eventType === 'phase' && data.phase === 'waiting_author_input') {
+            // v4.0: plan 模式下等待作者输入
+            specialPhase = 'waiting_author_input'
+            set({
+              phase: 'waiting_author_input',
+              waitingAuthorInputEngine: (data.engine as string) || null,
+              waitingAuthorInputLabel: (data.engineLabel as string) || null,
+              waitingAuthorInputMessage: (data.message as string) || null,
+            })
           } else if (eventType === 'phase' && (data.phase as string)?.startsWith('waiting_')) {
             // 等待审批状态 — 不做特殊处理，onDone 后的 fetchProposals 会处理
           } else if (eventType === 'phase' && data.phase === 'studio_engine') {
@@ -534,6 +553,12 @@ export const useHatchStore = create<HatchStore>((set, get) => ({
       // 特殊阶段：waiting_phase_confirmation — 保持状态，等待用户确认
       if (specialPhase === 'waiting_phase_confirmation') {
         set({ phase: 'waiting_phase_confirmation', streamText: '', currentEngine: null, _abortController: null })
+        return
+      }
+
+      // 特殊阶段：waiting_author_input — 保持状态，等待用户输入
+      if (specialPhase === 'waiting_author_input') {
+        set({ phase: 'waiting_author_input', streamText: '', currentEngine: null, _abortController: null })
         return
       }
 
@@ -670,111 +695,7 @@ export const useHatchStore = create<HatchStore>((set, get) => ({
     }
   },
 
-  runEngine: async (projectId, engine) => {
-    // Route outline engines to the outline store's SSE endpoints
-    if (OUTLINE_ENGINES.has(engine)) {
-      set({ phase: 'streaming', currentEngine: engine, streamText: '', lastStreamText: get().streamText, error: null })
-      const jobId = `engine:${engine}:${projectId}`
-
-      // 清除上一轮已完成的 job，注册新 job
-      get()._clearCompletedJobs()
-      get().registerLLMJob(jobId, get().engines.find(e => e.name === engine)?.label || engine, {
-        provider: '', model: '', label: '', contextLimit: 1_000_000,
-        promptTokens: 0, completionTokens: 0, totalTokens: 0,
-      })
-
-      const { useOutlineStore } = await import('./outline')
-      const outlineStore = useOutlineStore.getState()
-
-      // Wire up model/usage callbacks
-      useOutlineStore.setState({
-        _onModelInfo: (info) => {
-          get().updateLLMJob(jobId, {
-            provider: info.provider, model: info.model,
-            label: info.label, contextLimit: info.contextLimit,
-          })
-        },
-        _onUsage: (usage) => {
-          // 只更新 token，删除由 onDone 统一处理
-          get().updateLLMJob(jobId, {
-            promptTokens: usage.promptTokens ?? 0,
-            completionTokens: usage.completionTokens ?? 0,
-            totalTokens: usage.totalTokens ?? 0,
-          })
-        },
-      })
-
-      // Subscribe to outline store's streamText for display
-      const unsub = useOutlineStore.subscribe((state) => {
-        if (state.streamText) set({ streamText: state.streamText })
-      })
-      try {
-        if (engine === 'outline-generator') {
-          await outlineStore.generateOutline(projectId)
-        } else if (engine === 'volume-outline') {
-          await outlineStore.generateVolumeOutline(projectId)
-        } else if (engine === 'chapter-outline') {
-          await outlineStore.fetchVolumes(projectId)
-          const volumes = useOutlineStore.getState().volumes
-          const confirmed = volumes.find((v) => v.status === 'confirmed')
-          if (confirmed) {
-            await outlineStore.generateChapterOutlines(projectId, confirmed.id)
-          } else {
-            set({ error: '没有已确认的卷，无法生成章纲', phase: 'idle' })
-            get().updateLLMJob(jobId, { active: false })
-            return
-          }
-        }
-      } finally {
-        unsub()
-        useOutlineStore.setState({ _onModelInfo: null, _onUsage: null })
-        // 保留已完成的 job 供底部状态栏展示
-        const jobs = get().activeLLMJobs
-        if (jobs[jobId]) {
-          get().updateLLMJob(jobId, { active: false })
-        }
-      }
-      // After outline engine completes, sync state — backend drives next step
-      if (!get().fetchProposals) return // type guard
-      await get().fetchProposals(projectId)
-      const pendingNow = get().proposals.filter((p) => p.status === 'pending')
-      if (pendingNow.length > 0) {
-        set({ phase: 'waiting', currentEngine: null, autoPopupProposalId: pendingNow[0].id })
-      } else {
-        set({ phase: 'waiting', currentEngine: null })
-      }
-      return
-    }
-
-    // 防止竞态导致重复运行已有已批准提案的引擎（后端也有相同守卫）
-    const _approvedEngines = new Set(
-      get().proposals.filter((p) => p.status === 'approved').map((p) => p.sourceNode)
-    )
-    if (_approvedEngines.has(engine)) {
-      console.warn(`[hatch] runEngine blocked: ${engine} already has an approved proposal`)
-      return
-    }
-
-    const prevController = get()._abortController
-    if (prevController) prevController.abort()
-
-    const controller = new AbortController()
-    const jobId = `engine:${engine}:${projectId}`
-    // 清除上一轮已完成的 job
-    get()._clearCompletedJobs()
-    set({ phase: 'streaming', streamText: '', lastStreamText: get().streamText, error: null, currentEngine: engine, _abortController: controller, _lastTokenUpdate: 0 })
-    get().registerLLMJob(jobId, engine, {
-      provider: '', model: '', label: '', contextLimit: 1_000_000,
-      promptTokens: 0, completionTokens: 0, totalTokens: 0,
-    })
-
-    await get()._executeEngineSSE(
-      projectId, engine, jobId, controller,
-      `/api/hatch/${projectId}/advance`,
-    )
-  },
-
-  advanceHatching: async (projectId) => {
+  advanceHatching: async (projectId, authorNotes?: string) => {
     const prevController = get()._abortController
     if (prevController) prevController.abort()
 
@@ -782,15 +703,23 @@ export const useHatchStore = create<HatchStore>((set, get) => ({
     const jobId = `advance:${projectId}`
     // 清除上一轮已完成的 job，避免弹窗堆积
     get()._clearCompletedJobs()
-    set({ phase: 'streaming', streamText: '', lastStreamText: get().streamText, error: null, locked: false, currentEngine: null, _abortController: controller, _lastTokenUpdate: 0 })
+    // v4.0: 清除 plan 模式等待状态
+    set({
+      phase: 'streaming', streamText: '', lastStreamText: get().streamText,
+      error: null, locked: false, currentEngine: null,
+      waitingAuthorInputEngine: null, waitingAuthorInputLabel: null, waitingAuthorInputMessage: null,
+      _abortController: controller, _lastTokenUpdate: 0,
+    })
     get().registerLLMJob(jobId, '孵化推进', {
       provider: '', model: '', label: '', contextLimit: 1_000_000,
       promptTokens: 0, completionTokens: 0, totalTokens: 0,
     })
 
+    const fetchBody = authorNotes ? { authorNotes } : undefined
     await get()._executeEngineSSE(
       projectId, 'advance', jobId, controller,
       `/api/hatch/${projectId}/advance`,
+      fetchBody,
     )
   },
 
@@ -800,16 +729,15 @@ export const useHatchStore = create<HatchStore>((set, get) => ({
   },
 
   startStudioPhase: async (projectId) => {
-    // 切换到工作室阶段 — 由 /advance 自动调度（getNextPhase 会返回 outline-generator）
-    set({ hatchGroup: 'studio' })
+    // 工作室阶段由 /advance 自动调度，getNextPhase 会返回 outline-generator
+    // hatchGroup 由后端事件驱动，前端不做编排决策
     await get().advanceHatching(projectId)
   },
 
   completePhase: async (projectId, phase) => {
     try {
+      // 阶段确认后后端会自动推进，前端只需调用 API
       await apiPost(`/hatch/${projectId}/complete-phase/${phase}`, {})
-      // 阶段确认后自动推进
-      await get().advanceHatching(projectId)
     } catch (err: any) {
       set({ error: `阶段确认失败：${err.message}` })
     }
@@ -864,20 +792,8 @@ export const useHatchStore = create<HatchStore>((set, get) => ({
       set({ error: msg })
       throw new Error(msg)
     }
-    // Mark approved locally and supersede optionGroup siblings
-    const proposals = get().proposals.map((p) =>
-      p.id === proposalId ? { ...p, status: 'approved' as const } : p
-    )
-    const approved = proposals.find((p) => p.id === proposalId)
-    if (approved?.optionGroup) {
-      for (const p of proposals) {
-        if (p.optionGroup === approved.optionGroup && p.id !== proposalId && p.status === 'pending') {
-          const idx = proposals.indexOf(p)
-          proposals[idx] = { ...p, status: 'superseded' as const }
-        }
-      }
-    }
-    set({ proposals, autoPopupProposalId: null, selectedOptionId: null, currentProposalGroup: [], currentOptionGroup: null })
+    // 清除弹窗状态，proposal 状态由后端同步决定
+    set({ autoPopupProposalId: null, selectedOptionId: null, currentProposalGroup: [], currentOptionGroup: null })
 
     // 编排完全由后端驱动：approve 端点自动触发 onProposalsResolved
     // 前端只需同步最新数据，不做任何编排决策
@@ -894,7 +810,6 @@ export const useHatchStore = create<HatchStore>((set, get) => ({
 
   rejectProposal: async (proposalId) => {
     const rejectedProposal = get().proposals.find((p) => p.id === proposalId)
-    const sourceNode = rejectedProposal?.sourceNode
     const projectId = rejectedProposal?.projectId
     try {
       await apiPost(`/proposals/${proposalId}/reject`, {})
@@ -902,38 +817,19 @@ export const useHatchStore = create<HatchStore>((set, get) => ({
       set({ error: `驳回失败：${err.message}` })
       return
     }
-    const proposals = get().proposals.map((p) => {
-      if (p.id === proposalId) return { ...p, status: 'rejected' as const }
-      if (rejectedProposal?.optionGroup && p.optionGroup === rejectedProposal.optionGroup && p.status === 'pending') {
-        return { ...p, status: 'superseded' as const }
-      }
-      return p
-    })
-    set({ proposals, autoPopupProposalId: null })
-
-    // 驳回后同步数据，后端会在需要时自动推进
+    // 编排完全由后端驱动：reject 端点会自动触发 onProposalsResolved
+    // 前端只需同步最新数据，不做任何编排决策
     if (projectId) {
       await Promise.all([
         get().fetchProposals(projectId),
         get().fetchEngines(projectId),
       ])
-      const remainingPending = get().proposals.filter((p) => p.status === 'pending')
-      // 如果引擎正在运行，不要覆盖 streaming 阶段
-      if (get().phase === 'streaming') {
-        // 保持 streaming，不覆盖
-      } else if (remainingPending.length > 0) {
-        set({ phase: 'waiting', autoPopupProposalId: remainingPending[0].id })
-      } else {
-        set({ phase: 'waiting' })
-      }
-    } else if (get().phase !== 'streaming') {
-      set({ phase: 'waiting' })
     }
+    set({ autoPopupProposalId: null })
   },
 
   reviseProposal: async (proposalId, notes) => {
     const revisedProposal = get().proposals.find((p) => p.id === proposalId)
-    const sourceNode = revisedProposal?.sourceNode
     const projectId = revisedProposal?.projectId
     try {
       await apiPost(`/proposals/${proposalId}/revise`, { notes })
@@ -941,21 +837,12 @@ export const useHatchStore = create<HatchStore>((set, get) => ({
       set({ error: `修改请求失败：${err.message}` })
       return
     }
-    const proposals = get().proposals.map((p) => {
-      if (p.id === proposalId) return { ...p, status: 'revision_requested' as const }
-      // Supersede optionGroup siblings so they don't re-appear with new proposals
-      if (revisedProposal?.optionGroup && p.optionGroup === revisedProposal.optionGroup && p.status === 'pending') {
-        return { ...p, status: 'superseded' as const }
-      }
-      return p
-    })
-    set({ proposals, autoPopupProposalId: null })
-    // Re-run the same engine — the revision notes are stored in the DB for context
-    if (sourceNode && projectId) {
-      get().runEngine(projectId, sourceNode)
-    } else {
-      set({ phase: 'waiting' })
+    // 编排完全由后端驱动：revise 端点会自动触发 onProposalsResolved
+    // 前端只需同步最新数据，不做任何编排决策
+    if (projectId) {
+      await get().fetchProposals(projectId)
     }
+    set({ autoPopupProposalId: null })
   },
 
   activateProject: async (projectId) => {

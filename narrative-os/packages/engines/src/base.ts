@@ -231,7 +231,7 @@ export abstract class Engine {
    * - LLM 通过多轮工具调用按需拉取所需数据
    */
   protected usesToolBasedContext(): boolean {
-    return true;
+    return false;
   }
 
   /**
@@ -319,7 +319,17 @@ export abstract class Engine {
       .where(eq(projects.id, ctx.projectId));
     if (project?.collaborationMode === "full_auto") return "full_auto";
     if (project?.collaborationMode === "plan") return "plan";
-    return this.defaultCollaborationMode;
+    // 优先使用引擎自身的默认协作模式
+    const engineDef = getEngineDef(this.name);
+    return engineDef?.defaultCollaborationMode || this.defaultCollaborationMode;
+  }
+
+  /**
+   * v4.0: 将作者意图注入 system prompt
+   */
+  protected injectAuthorNotes(systemPrompt: string, authorNotes?: string): string {
+    if (!authorNotes || authorNotes.trim().length === 0) return systemPrompt;
+    return `${systemPrompt}\n\n## 作者意图\n作者对本次生成有以下想法和要求，请在生成方案时充分考虑：\n${authorNotes.trim()}`;
   }
 
   /**
@@ -540,7 +550,14 @@ export abstract class Engine {
     try {
       yield { type: "start" };
 
-      const systemPrompt = await this.buildSystemPrompt(ctx);
+      // v4.0: 解析当前协作模式
+      this.currentMode = await this.resolveMode(ctx);
+
+      let systemPrompt = await this.buildSystemPrompt(ctx);
+      // v4.0: 注入创作宪章到 system prompt
+      systemPrompt = await this.buildSystemPromptWithCharter(ctx, systemPrompt);
+      // v4.0: 注入作者意图
+      systemPrompt = this.injectAuthorNotes(systemPrompt, ctx.authorNotes);
       const revisionNotes = await this.loadRevisionNotes(ctx.projectId);
       const memory = await this.injectMemory(ctx.projectId);
       const projectMeta = await this.buildProjectMeta(ctx);
@@ -710,8 +727,15 @@ export abstract class Engine {
     try {
       yield { type: "start" };
 
+      // v4.0: 解析当前协作模式
+      this.currentMode = await this.resolveMode(ctx);
+
       // 构建系统提示（含引擎地图 + 工具使用指南，不含批量上下文注入）
-      const systemPrompt = await this.buildSystemPrompt(ctx);
+      let systemPrompt = await this.buildSystemPrompt(ctx);
+      // v4.0: 注入创作宪章到 system prompt
+      systemPrompt = await this.buildSystemPromptWithCharter(ctx, systemPrompt);
+      // v4.0: 注入作者意图
+      systemPrompt = this.injectAuthorNotes(systemPrompt, ctx.authorNotes);
       const revisionNotes = await this.loadRevisionNotes(ctx.projectId);
       const projectMeta = await this.buildProjectMeta(ctx);
       const toolSection = buildToolSystemPromptSection();

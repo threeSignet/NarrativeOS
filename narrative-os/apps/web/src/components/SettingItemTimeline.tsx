@@ -17,7 +17,7 @@ export function SettingItemTimeline({ itemId }: { itemId: string }) {
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
-    apiFetch(`/api/settings/items/${itemId}/changes`)
+    apiFetch(`/settings/items/${itemId}/changes`)
       .then((data: any) => {
         setEvents(data.changes || [])
         setLoading(false)

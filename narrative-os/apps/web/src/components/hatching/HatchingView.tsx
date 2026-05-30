@@ -3,7 +3,7 @@ import {
   Loader2, Sparkles, BookOpen, Wand2, Check, CheckCircle,
   Globe2, Mountain, Swords, MapPin, Users, Package,
   FileText, Layers, PawPrint, Music, Clock, Flame, Coins, GitBranch, Scale, Eye, Pen, Ruler,
-  Info, ChevronDown, ChevronRight, Lock,
+  Info, ChevronDown, ChevronRight, Lock, Shield,
 } from 'lucide-react'
 import type { Proposal, EngineInfo } from '../../stores/hatch'
 import type { Project } from '../../stores/projects'
@@ -343,7 +343,7 @@ function EngineMapPanel({ engines, hatchGroup }: { engines: EngineInfo[]; hatchG
 
 // ── Main Component ──
 
-export default function HatchingView({ project, phase, proposals, engines, currentEngine, streamText, lastStreamText, hatchError, onStart, hatchGroup, onStartStudio, onCompletePhase, phaseConfirmationTarget, onActivateProject, locked, refinementContext }: {
+export default function HatchingView({ project, phase, proposals, engines, currentEngine, streamText, lastStreamText, hatchError, onStart, hatchGroup, onStartStudio, onCompletePhase, phaseConfirmationTarget, onActivateProject, locked, refinementContext, waitingAuthorInputEngine, waitingAuthorInputLabel, waitingAuthorInputMessage, onSubmitAuthorNotes }: {
   project: Project
   phase: string
   proposals: Proposal[]
@@ -360,6 +360,10 @@ export default function HatchingView({ project, phase, proposals, engines, curre
   onActivateProject?: () => void
   locked?: boolean
   refinementContext?: { parentName: string; parentScale: string; targetScale: string } | null
+  waitingAuthorInputEngine?: string | null
+  waitingAuthorInputLabel?: string | null
+  waitingAuthorInputMessage?: string | null
+  onSubmitAuthorNotes?: (notes: string) => void
 }) {
   const pipeline = useMemo(
     () => computePipeline(engines, proposals, currentEngine, hatchGroup),
@@ -370,6 +374,9 @@ export default function HatchingView({ project, phase, proposals, engines, curre
     [proposals],
   )
   const streamScroll = useAutoScroll(streamText)
+
+  // v4.0: plan 模式下作者输入状态
+  const [authorNotesInput, setAuthorNotesInput] = useState('')
 
   const currentEngineLabel = getEngineDisplayLabel(currentEngine, refinementContext)
   const displayText = streamText || lastStreamText
@@ -518,6 +525,60 @@ export default function HatchingView({ project, phase, proposals, engines, curre
               「{project.title}」的世界观与大纲已全部就绪。项目已进入写作模式。
             </p>
           </div>
+        </div>
+      )
+    }
+
+    // ── WAITING_AUTHOR_INPUT ──
+    // v4.0: plan 模式下等待作者输入意图
+    if (phase === 'waiting_author_input') {
+      return (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 16, padding: '48px 20px', textAlign: 'center', maxWidth: 560, margin: '0 auto' }}>
+          <div style={{ width: 56, height: 56, borderRadius: 14, background: 'rgba(147,197,253,0.08)', border: '1px solid rgba(147,197,253,0.15)', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto' }}>
+            <Shield size={24} style={{ color: 'var(--accent-ice)' }} />
+          </div>
+          <div>
+            <h2 style={{ fontFamily: 'var(--font-brand)', fontSize: 18, color: 'var(--text-primary)', marginBottom: 6 }}>
+              「{waitingAuthorInputLabel || waitingAuthorInputEngine || '...'}」即将开始运行
+            </h2>
+            <p style={{ fontSize: 13, color: 'var(--text-muted)', lineHeight: 1.6 }}>
+              {waitingAuthorInputMessage || '请提供你的想法和要求，AI 将据此生成方案。'}
+            </p>
+          </div>
+          <textarea
+            value={authorNotesInput}
+            onChange={(e) => setAuthorNotesInput(e.target.value)}
+            placeholder="例如：我希望这个世界有一个隐藏的古代文明，主角在探索中逐渐发现它的秘密..."
+            style={{
+              width: '100%', minHeight: 120, padding: 14, borderRadius: 10,
+              background: 'rgba(255,255,255,0.03)', border: '1px solid var(--glass-border)',
+              color: 'var(--text-primary)', fontSize: 13, lineHeight: 1.7,
+              fontFamily: 'var(--font-ui)', resize: 'vertical',
+              outline: 'none',
+            }}
+          />
+          <button
+            onClick={() => {
+              if (onSubmitAuthorNotes) {
+                onSubmitAuthorNotes(authorNotesInput)
+                setAuthorNotesInput('')
+              }
+            }}
+            style={{
+              display: 'inline-flex', alignItems: 'center', gap: 8,
+              padding: '14px 28px', borderRadius: 10,
+              background: 'rgba(147,197,253,0.14)', color: 'var(--accent-ice)',
+              border: '1px solid rgba(147,197,253,0.25)',
+              fontSize: 14, fontWeight: 600, cursor: 'pointer', fontFamily: 'var(--font-ui)',
+              transition: 'all var(--duration) var(--ease)',
+              alignSelf: 'center',
+            }}
+            onMouseEnter={(e) => { e.currentTarget.style.background = 'rgba(147,197,253,0.22)' }}
+            onMouseLeave={(e) => { e.currentTarget.style.background = 'rgba(147,197,253,0.14)' }}
+          >
+            <Wand2 size={16} />
+            确认并开始生成
+          </button>
         </div>
       )
     }

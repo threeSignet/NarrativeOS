@@ -29,6 +29,8 @@ import ProposalList from '../components/editor/ProposalList'
 import EntityDetailModal from '../components/editor/EntityDetailModal'
 import NotificationPanel from '../components/editor/NotificationPanel'
 import Window from '../components/ui/Window'
+import { CharterForm } from '../components/CharterForm'
+import { WorldSnapshotHistory } from '../components/WorldSnapshotHistory'
 
 export default function ProjectEditor() {
   const { id } = useParams<{ id: string }>()
@@ -136,7 +138,6 @@ export default function ProjectEditor() {
   const startHatching = useHatchStore((s) => s.startHatching)
   const startStudioPhase = useHatchStore((s) => s.startStudioPhase)
   const hatchGroup = useHatchStore((s) => s.hatchGroup)
-  const runEngine = useHatchStore((s) => s.runEngine)
   const locked = useHatchStore((s) => s.locked)
   const approveProposal = useHatchStore((s) => s.approveProposal)
   const rejectProposal = useHatchStore((s) => s.rejectProposal)
@@ -147,6 +148,10 @@ export default function ProjectEditor() {
   const relations = useHatchStore((s) => s._relations)
   const phaseConfirmationTarget = useHatchStore((s) => s.phaseConfirmationTarget)
   const refinementContext = useHatchStore((s) => s._refinementContext)
+  const waitingAuthorInputEngine = useHatchStore((s) => s.waitingAuthorInputEngine)
+  const waitingAuthorInputLabel = useHatchStore((s) => s.waitingAuthorInputLabel)
+  const waitingAuthorInputMessage = useHatchStore((s) => s.waitingAuthorInputMessage)
+  const advanceHatching = useHatchStore((s) => s.advanceHatching)
 
   const companionActivityText = useCompanionStore((s) => s.activityText)
   const companionActivityColor = useCompanionStore((s) => s.activityColor)
@@ -292,7 +297,7 @@ export default function ProjectEditor() {
   })
   const outlineWindows = windows.filter((w) => w.type === 'outline-detail')
 
-  const editorContent = (isHatching || phase === 'streaming' || phase === 'waiting' || phase === 'waiting_phase_confirmation' || phase === 'world_complete') ? (
+  const editorContent = (isHatching || phase === 'streaming' || phase === 'waiting' || phase === 'waiting_phase_confirmation' || phase === 'waiting_author_input' || phase === 'world_complete') ? (
     <HatchingView
       project={project}
       phase={phase}
@@ -316,6 +321,12 @@ export default function ProjectEditor() {
       }}
       locked={locked}
       refinementContext={refinementContext}
+      waitingAuthorInputEngine={waitingAuthorInputEngine}
+      waitingAuthorInputLabel={waitingAuthorInputLabel}
+      waitingAuthorInputMessage={waitingAuthorInputMessage}
+      onSubmitAuthorNotes={(notes) => {
+        if (project?.id) advanceHatching(project.id, notes)
+      }}
     />
   ) : editorView === 'outline' ? (
     <OutlineOverviewView
@@ -374,6 +385,10 @@ export default function ProjectEditor() {
                   openWindow('world-view', { title: '世界视图' })
                   setActivePanel(null)
                 }}
+                onOpenSnapshotHistory={() => {
+                  openWindow('snapshot-history', { title: '世界快照' })
+                  setActivePanel(null)
+                }}
                 searchQuery={panelSearch}
               />
             )}
@@ -402,6 +417,8 @@ export default function ProjectEditor() {
                   const updated = await store.getProject(project.id)
                   setProject(updated)
                 }}
+                onOpenCharter={() => openWindow('charter', { title: '创作宪章' })}
+                onClosePanel={() => setActivePanel(null)}
               />
             )}
           </div>
@@ -519,6 +536,22 @@ export default function ProjectEditor() {
         </Window>
       )
     })}
+
+    {windows.filter((w) => w.type === 'charter').map((win) => (
+      <Window key={win.id} window={win}>
+        <div style={{ height: '100%', padding: '16px 20px', overflowY: 'auto' }}>
+          <CharterForm projectId={project.id} />
+        </div>
+      </Window>
+    ))}
+
+    {windows.filter((w) => w.type === 'snapshot-history').map((win) => (
+      <Window key={win.id} window={win}>
+        <div style={{ height: '100%', padding: '16px 20px', overflowY: 'auto' }}>
+          <WorldSnapshotHistory projectId={project.id} />
+        </div>
+      </Window>
+    ))}
 
     {outlineWindows.map((win) => {
       const data = (win.props.outlineData as Record<string, any>) || null

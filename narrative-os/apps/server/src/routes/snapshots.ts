@@ -4,6 +4,28 @@ import { db, worldSnapshots } from "@narrative-os/database";
 import { eq, desc } from "drizzle-orm";
 import { validateUUID } from "../services/hatch-service";
 
+function deepEqual(a: any, b: any): boolean {
+  if (a === b) return true;
+  if (typeof a !== typeof b) return false;
+  if (typeof a !== "object" || a === null || b === null) return false;
+  if (Array.isArray(a) !== Array.isArray(b)) return false;
+  if (Array.isArray(a)) {
+    if (a.length !== b.length) return false;
+    for (let i = 0; i < a.length; i++) {
+      if (!deepEqual(a[i], b[i])) return false;
+    }
+    return true;
+  }
+  const keysA = Object.keys(a);
+  const keysB = Object.keys(b);
+  if (keysA.length !== keysB.length) return false;
+  for (const k of keysA) {
+    if (!keysB.includes(k)) return false;
+    if (!deepEqual(a[k], b[k])) return false;
+  }
+  return true;
+}
+
 const app = new Hono();
 
 app.get("/projects/:id/snapshots", async (c) => {
@@ -54,7 +76,7 @@ app.post("/world/snapshots/compare", async (c) => {
 
   for (const bi of itemsB) {
     const ai = itemsA.find((x: any) => x.id === bi.id);
-    if (ai && JSON.stringify(ai.content) !== JSON.stringify(bi.content)) {
+    if (ai && !deepEqual(ai.content, bi.content)) {
       modified.push({ before: ai, after: bi });
     }
   }
